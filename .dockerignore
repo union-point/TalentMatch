@@ -1,0 +1,38 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# CI / agent files
+.github/
+.agents/
+.venv/
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependencies / lock
+pip-log.txt
+
+# Python caches
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local data / uploads
+uploads/
+*.log
+
+# Docs
+docs/
+PROGRESS.md
+AGENTS.md
+Makefile

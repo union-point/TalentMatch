@@ -1,0 +1,60 @@
+[project]
+name = "talentmatch"
+version = "0.1.0"
+description = "AI-powered HR assistant for resume analysis"
+requires-python = ">=3.13"
+
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.34.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.7.0",
+    "python-multipart>=0.0.18",
+    "celery[redis]>=5.4.0",
+    "redis>=5.2.0",
+    "google-genai>=1.0.0",
+    "openai>=1.0.0",
+    "docling>=2.0.0",
+]
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+ignore_missing_imports = true
+incremental = true
+cache_dir = ".mypy_cache"
+plugins = [
+    "pydantic.mypy"
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: marks tests that require a running PostgreSQL database",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "httpx>=0.28.0",
+    "ruff>=0.15.20",
+    "mypy>=2.2.0",
+    "aiosqlite>=0.20.0",
+]
