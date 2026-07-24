@@ -10,7 +10,7 @@ const navItems = [
 export function Layout() {
   return (
     <div className="flex min-h-screen">
-      <aside className="w-64 border-r bg-sidebar p-4">
+      <aside className="w-64 shrink-0 border-r bg-sidebar p-4">
         <h1 className="mb-8 text-xl font-bold text-sidebar-primary">
           TalentMatch
         </h1>
@@ -35,7 +35,7 @@ export function Layout() {
           ))}
         </nav>
       </aside>
-      <main className="flex-1 p-8">
+      <main className="min-w-0 flex-1 overflow-x-hidden p-8">
         <Outlet />
       </main>
     </div>

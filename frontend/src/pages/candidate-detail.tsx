@@ -82,7 +82,7 @@ export function CandidateDetail() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 max-w-full space-y-6">
       <Button variant="ghost" onClick={() => navigate(-1)}>
         <ArrowLeft className="h-4 w-4" />
         Back
