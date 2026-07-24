@@ -1,4 +1,4 @@
-import { useState, useRef, type DragEvent } from 'react';
+import { useState, useRef, useCallback, type DragEvent } from 'react';
 import { Upload, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -6,6 +6,47 @@ import { Button } from '@/components/ui/button';
 interface ResumeDropzoneProps {
   onUpload: (files: File[]) => void;
   isUploading: boolean;
+}
+
+const SUPPORTED_EXTENSIONS = new Set(['.pdf', '.docx', '.html', '.htm']);
+
+function isSupportedFile(name: string): boolean {
+  const ext = name.toLowerCase().slice(name.lastIndexOf('.'));
+  return SUPPORTED_EXTENSIONS.has(ext);
+}
+
+function readDirectoryEntries(
+  reader: FileSystemDirectoryReader,
+): Promise<FileSystemEntry[]> {
+  return new Promise((resolve, reject) => {
+    reader.readEntries((entries) => resolve(entries), reject);
+  });
+}
+
+async function traverseEntry(
+  entry: FileSystemEntry,
+): Promise<File[]> {
+  if (entry.isFile) {
+    const file = await new Promise<File>((resolve, reject) =>
+      (entry as FileSystemFileEntry).file(resolve, reject),
+    );
+    return isSupportedFile(file.name) ? [file] : [];
+  }
+
+  if (entry.isDirectory) {
+    const reader = (entry as FileSystemDirectoryEntry).createReader();
+    const files: File[] = [];
+    let batch: FileSystemEntry[];
+    do {
+      batch = await readDirectoryEntries(reader);
+      for (const child of batch) {
+        files.push(...await traverseEntry(child));
+      }
+    } while (batch.length > 0);
+    return files;
+  }
+
+  return [];
 }
 
 export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
@@ -24,13 +65,27 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
     setIsDragging(false);
   }
 
-  function handleDrop(e: DragEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) onUpload(files);
-  }
+  const handleDrop = useCallback(
+    async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragging(false);
+
+      const items = Array.from(e.dataTransfer.items);
+      if (items.length > 0 && items[0].webkitGetAsEntry !== undefined) {
+        const files: File[] = [];
+        for (const item of items) {
+          const entry = item.webkitGetAsEntry();
+          if (entry) files.push(...await traverseEntry(entry));
+        }
+        if (files.length > 0) onUpload(files);
+      } else {
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) onUpload(files);
+      }
+    },
+    [onUpload],
+  );
 
   function handleFileSelect() {
     fileRef.current?.click();
@@ -77,7 +132,7 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
         )}
       </div>
       <p className="mb-1 text-sm font-medium">
-        {isDragging ? 'Drop files here' : 'Drag & drop resumes here'}
+        {isDragging ? 'Drop files or folders here' : 'Drag & drop resumes or folders here'}
       </p>
       <p className="mb-4 text-xs text-muted-foreground">
         or click to browse — PDF, DOCX, HTML
