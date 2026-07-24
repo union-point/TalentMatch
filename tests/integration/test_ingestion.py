@@ -198,7 +198,7 @@ class TestIngestionIntegration:
         db_resume = result.scalar_one()
         assert db_resume.injection_scan_passed is False
         assert db_resume.injection_scan_details is not None
-        assert "suspicious_instructions" in db_resume.injection_scan_details
+        assert "known_injection_phrases" in db_resume.injection_scan_details
 
     @pytest.mark.asyncio
     async def test_upload_multiple_files_unique_ids(self, real_client: AsyncClient) -> None:

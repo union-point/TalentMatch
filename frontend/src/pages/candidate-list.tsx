@@ -84,7 +84,7 @@ export function CandidateList() {
         </CardContent>
       </Card>
 
-      {uploadResult && uploadResult.succeeded > 0 && (
+      {uploadResult && uploadResult.total > 0 && (
         <div className="flex items-center justify-center">
           <Button
             size="lg"
