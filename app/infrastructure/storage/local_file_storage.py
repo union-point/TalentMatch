@@ -3,6 +3,8 @@ import uuid
 from pathlib import Path
 from uuid import UUID
 
+from starlette.concurrency import run_in_threadpool
+
 from app.config import settings
 from app.core.exceptions import FileNotFoundError
 from app.domain.ports.file_storage import FileStorage
@@ -11,9 +13,11 @@ from app.domain.ports.file_storage import FileStorage
 class LocalFileStorage(FileStorage):
     def __init__(self, base_dir: str | Path | None = None) -> None:
         self._base_dir = Path(base_dir or settings.upload_dir)
-        self._base_dir.mkdir(parents=True, exist_ok=True)
 
     async def save(self, file_content: bytes, original_filename: str, subfolder: str) -> Path:
+        return await run_in_threadpool(self._save_sync, file_content, original_filename, subfolder)
+
+    def _save_sync(self, file_content: bytes, original_filename: str, subfolder: str) -> Path:
         target_dir = self._base_dir / subfolder
         target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -26,6 +30,9 @@ class LocalFileStorage(FileStorage):
         return file_path
 
     async def get_path(self, file_id: UUID, subfolder: str) -> Path:
+        return await run_in_threadpool(self._get_path_sync, file_id, subfolder)
+
+    def _get_path_sync(self, file_id: UUID, subfolder: str) -> Path:
         target_dir = self._base_dir / subfolder
         if not target_dir.exists():
             raise FileNotFoundError(str(file_id))

@@ -1,9 +1,11 @@
 import logging
 from pathlib import Path
+from threading import Lock
 
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 from docling.document_converter import DocumentConverter, PdfFormatOption
+from starlette.concurrency import run_in_threadpool
 
 from app.core.exceptions import ParsingError
 from app.domain.ports.file_parser import FileParser
@@ -13,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 class DoclingParser(FileParser):
     def __init__(self) -> None:
+        self._conversion_lock = Lock()
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_ocr = True
         pipeline_options.do_table_structure = True
@@ -30,14 +33,20 @@ class DoclingParser(FileParser):
         )
 
     async def parse(self, file_path: Path) -> str:
+        return await run_in_threadpool(self._parse_sync, file_path)
+
+    def _parse_sync(self, file_path: Path) -> str:
         try:
-            result = self._converter.convert(str(file_path))
-            document = result.document
-            markdown_text = document.export_to_markdown()
-            return self._normalize_text(markdown_text)
+            with self._conversion_lock:
+                return self._convert(file_path)
         except Exception as e:
             logger.error("Failed to parse file %s: %s", file_path, e)
             raise ParsingError(str(e)) from e
+
+    def _convert(self, file_path: Path) -> str:
+        result = self._converter.convert(str(file_path))
+        markdown_text = result.document.export_to_markdown()
+        return self._normalize_text(markdown_text)
 
     @staticmethod
     def _normalize_text(text: str) -> str:
