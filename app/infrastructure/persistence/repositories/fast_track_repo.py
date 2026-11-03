@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.fast_track_result import FastTrackResult
@@ -36,10 +36,28 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
         return self._to_domain(model)
 
     async def get_by_job_description_id(self, jd_id: uuid.UUID) -> list[FastTrackResult]:
+        # Preserve history, but expose only the latest attempt for each candidate.
+        ranked = (
+            select(
+                FastTrackResultModel.id,
+                func.row_number()
+                .over(
+                    partition_by=FastTrackResultModel.resume_id,
+                    order_by=(
+                        FastTrackResultModel.created_at.desc(),
+                        FastTrackResultModel.id.desc(),
+                    ),
+                )
+                .label("position"),
+            )
+            .where(FastTrackResultModel.job_description_id == jd_id)
+            .subquery()
+        )
         result = await self._session.execute(
             select(FastTrackResultModel)
-            .where(FastTrackResultModel.job_description_id == jd_id)
-            .order_by(FastTrackResultModel.score.desc())
+            .join(ranked, FastTrackResultModel.id == ranked.c.id)
+            .where(ranked.c.position == 1)
+            .order_by(FastTrackResultModel.score.desc(), FastTrackResultModel.resume_id)
         )
         return [self._to_domain(m) for m in result.scalars().all()]
 

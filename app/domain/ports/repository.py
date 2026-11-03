@@ -37,9 +37,9 @@ class FastTrackRepository(ABC):
     async def get_by_id(self, result_id: uuid.UUID) -> FastTrackResult | None: ...
 
     @abstractmethod
-    async def get_by_job_description_id(
-        self, jd_id: uuid.UUID
-    ) -> list[FastTrackResult]: ...
+    async def get_by_job_description_id(self, jd_id: uuid.UUID) -> list[FastTrackResult]:
+        """Return the latest result per resume, ordered by descending score."""
+        ...
 
 
 class DeepAnalysisRepository(ABC):
