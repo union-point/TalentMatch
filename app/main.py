@@ -17,6 +17,7 @@ from app.presentation.api.middleware import (
 from app.presentation.api.routes.analysis import router as analysis_router
 from app.presentation.api.routes.dashboard import router as dashboard_router
 from app.presentation.api.routes.ingestion import router as ingestion_router
+from app.presentation.api.uploads import UploadLimitMiddleware
 
 setup_logging(settings.log_level)
 logger = logging.getLogger(__name__)
@@ -36,6 +37,7 @@ app = FastAPI(
 )
 
 # Middleware added later wraps middleware added earlier.
+app.add_middleware(UploadLimitMiddleware)
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,

@@ -186,3 +186,13 @@ Local tests without Docker app container: `uv run pytest` (integration tests nee
 - Docling downloads model artifacts on first parse (cold start).
 - Deep analysis requires a running Celery worker, Celery beat, and Redis. Run exactly one beat scheduler. Committed pending analyses are dispatched every 30 seconds and retried after publication failures; duplicate deliveries are ignored by an atomic worker claim. No schema migration is required. Claimed jobs have a configurable `DEEP_ANALYSIS_TIMEOUT_SECONDS` budget (default 240 seconds). A periodic recovery task marks abandoned claims failed after that budget plus 60 seconds; users can explicitly retry. Late worker results cannot overwrite recovered failures.
 - Alembic migrations need a live Postgres instance.
+
+### Upload resource limits
+
+Oversized uploads return HTTP 413. Defaults: 10 MiB per file, 50 MiB total file
+content per batch, and 20 files per batch. Request bodies are also capped while
+streaming, with 1 MiB additional allowance for multipart metadata. Configure
+`MAX_UPLOAD_FILE_BYTES`, `MAX_UPLOAD_BATCH_BYTES`, and `MAX_UPLOAD_FILES` to change
+these limits. Docling accepts at most `MAX_DOCUMENT_PAGES` (default 50) and PDF/image
+conversion uses `DOCUMENT_TIMEOUT_SECONDS` (default 120). Incomplete conversions
+are rejected instead of scoring partial text.

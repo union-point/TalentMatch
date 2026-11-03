@@ -11,6 +11,11 @@ class Settings(BaseSettings):
     cors_origins: list[str]
     upload_dir: str = "./uploads"
     log_level: str = "INFO"
+    max_upload_file_bytes: int = Field(default=10 * 1024 * 1024, gt=0)
+    max_upload_batch_bytes: int = Field(default=50 * 1024 * 1024, gt=0)
+    max_upload_files: int = Field(default=20, gt=0)
+    max_document_pages: int = Field(default=50, gt=0)
+    document_timeout_seconds: int = Field(default=120, gt=0)
 
     ai_fast_track_provider: str = "gemini"
     ai_fast_track_model: str = "gemini-3.1-flash-lite"

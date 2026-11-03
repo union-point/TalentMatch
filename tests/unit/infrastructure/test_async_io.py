@@ -5,10 +5,22 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from docling.datamodel.base_models import ConversionStatus
 
 from app.core.exceptions import ParsingError
 from app.infrastructure.parsing.docling_parser import DoclingParser
 from app.infrastructure.storage.local_file_storage import LocalFileStorage
+
+
+def test_incomplete_document_is_rejected_without_exporting_text(tmp_path: Path) -> None:
+    parser = DoclingParser.__new__(DoclingParser)
+    parser._conversion_lock = threading.Lock()
+    parser._converter = MagicMock()
+    result = parser._converter.convert.return_value
+    result.status = ConversionStatus.PARTIAL_SUCCESS
+    with pytest.raises(ParsingError, match="did not complete"):
+        parser._parse_sync(tmp_path / "resume.pdf")
+    result.document.export_to_markdown.assert_not_called()
 
 
 async def test_conversion_leaves_event_loop_responsive(tmp_path: Path) -> None:
@@ -18,11 +30,12 @@ async def test_conversion_leaves_event_loop_responsive(tmp_path: Path) -> None:
     started, release = threading.Event(), threading.Event()
     loop_thread = threading.get_ident()
 
-    def convert(path: str) -> MagicMock:
+    def convert(path: str, **kwargs: int) -> MagicMock:
         assert threading.get_ident() != loop_thread
         started.set()
         assert release.wait(timeout=5)
         result = MagicMock()
+        result.status = ConversionStatus.SUCCESS
         result.document.export_to_markdown.return_value = "  hello   world  "
         return result
 

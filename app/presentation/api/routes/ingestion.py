@@ -4,12 +4,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, s
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.ingestion_service import IngestionService
+from app.config import settings
 from app.domain.value_objects import InjectionScanResult
 from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories.job_description_repo import (
     SQLAlchemyJobDescriptionRepository,
 )
 from app.presentation.api.dependencies import get_ingestion_service
+from app.presentation.api.uploads import read_upload
 from app.presentation.schemas.job_description import (
     InjectionScanDetails,
     JobDescriptionDetailResponse,
@@ -37,7 +39,7 @@ async def upload_job_description(
     company: str = Form(...),
     service: IngestionService = Depends(get_ingestion_service),
 ) -> JobDescriptionUploadResponse:
-    content = await file.read()
+    content = await read_upload(file)
     result = await service.ingest_job_description(
         file_content=content,
         filename=file.filename or "unknown",
@@ -122,7 +124,7 @@ async def upload_resume(
     email: str | None = Form(None),
     service: IngestionService = Depends(get_ingestion_service),
 ) -> ResumeUploadResponse:
-    content = await file.read()
+    content = await read_upload(file)
     result = await service.ingest_resume(
         file_content=content,
         filename=file.filename or "unknown",
@@ -144,9 +146,13 @@ async def batch_upload_resumes(
     files: list[UploadFile] = File(...),
     service: IngestionService = Depends(get_ingestion_service),
 ) -> BatchUploadResponse:
+    if len(files) > settings.max_upload_files:
+        raise HTTPException(status_code=413, detail="Too many uploaded files")
     file_tuples: list[tuple[bytes, str]] = []
+    remaining = settings.max_upload_batch_bytes
     for upload_file in files:
-        content = await upload_file.read()
+        content = await read_upload(upload_file, remaining)
+        remaining -= len(content)
         file_tuples.append((content, upload_file.filename or "unknown"))
 
     results = await service.ingest_resumes_batch(file_tuples)
