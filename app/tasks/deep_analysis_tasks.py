@@ -3,12 +3,14 @@ import logging
 import uuid
 
 from celery import Task as CeleryTask
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.domain.value_objects import AnalysisStatus
 from app.infrastructure.ai import AIServiceFactory
 from app.infrastructure.persistence.database import engine
+from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 from app.infrastructure.persistence.repositories.deep_analysis_repo import (
     SQLAlchemyDeepAnalysisRepository,
 )
@@ -36,13 +38,11 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
         resume_repo = SQLAlchemyResumeRepository(session)
         jd_repo = SQLAlchemyJobDescriptionRepository(session)
 
-        analysis = await deep_repo.get_by_id(analysis_id)
+        analysis = await deep_repo.claim_pending(analysis_id)
         if analysis is None:
-            logger.error("Deep analysis %s not found; aborting task.", analysis_id)
+            logger.info("Deep analysis %s is absent or already claimed; skipping.", analysis_id)
             return
 
-        analysis.status = AnalysisStatus.IN_PROGRESS
-        await deep_repo.save(analysis)
         await session.commit()
 
         resume = await resume_repo.get_by_id(analysis.resume_id)
@@ -80,3 +80,29 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
 
         await deep_repo.save(analysis)
         await session.commit()
+
+
+@celery_app.task(name="tasks.dispatch_pending_deep_analyses")  # type: ignore[untyped-decorator]
+def dispatch_pending_deep_analyses() -> None:
+    asyncio.run(_dispatch_pending_deep_analyses_async())
+
+
+async def _dispatch_pending_deep_analyses_async() -> None:
+    """Retry committed pending jobs until a worker claims them.
+
+    Publishing never consumes the intent, so broker failures or a dispatcher
+    crash cannot lose work. Duplicate deliveries are safe via claim_pending.
+    """
+    await engine.dispose()
+    async with AsyncSession(engine) as session:
+        result = await session.scalars(
+            select(DeepAnalysisModel.id).where(
+                DeepAnalysisModel.status == AnalysisStatus.PENDING.value
+            )
+        )
+        analysis_ids = list(result)
+    for analysis_id in analysis_ids:
+        try:
+            await asyncio.to_thread(run_deep_analysis.delay, str(analysis_id))
+        except Exception:
+            logger.exception("Publication failed for %s; will retry next sweep", analysis_id)

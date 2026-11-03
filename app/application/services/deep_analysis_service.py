@@ -14,7 +14,6 @@ from app.domain.ports.repository import (
     ResumeRepository,
 )
 from app.domain.value_objects import AnalysisStatus
-from app.tasks.deep_analysis_tasks import run_deep_analysis as run_deep_analysis_task
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,8 @@ class DeepAnalysisService:
         )
         saved = await self._deep_analysis_repository.save(analysis)
 
-        run_deep_analysis_task.delay(str(saved.id))
+        # The committed PENDING row is the durable dispatch intent.
+        # The periodic dispatcher reads it from a separate transaction.
 
         logger.info(
             "Deep analysis requested: analysis_id=%s resume_id=%s jd_id=%s",

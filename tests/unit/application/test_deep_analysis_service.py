@@ -75,7 +75,7 @@ def sample_resume() -> Resume:
 
 class TestDeepAnalysisServiceRequestAnalysis:
     @pytest.mark.asyncio
-    async def test_request_creates_pending_analysis_and_dispatches_task(
+    async def test_request_creates_pending_intent_without_publishing(
         self,
         service: DeepAnalysisService,
         mock_jd_repo: AsyncMock,
@@ -95,9 +95,7 @@ class TestDeepAnalysisServiceRequestAnalysis:
         )
         mock_deep_repo.save.return_value = saved_analysis
 
-        with patch(
-            "app.application.services.deep_analysis_service.run_deep_analysis_task"
-        ) as mock_task:
+        with patch("app.tasks.deep_analysis_tasks.run_deep_analysis") as mock_task:
             result = await service.request_deep_analysis(
                 resume_id=sample_resume.id,
                 job_description_id=sample_jd.id,
@@ -113,7 +111,7 @@ class TestDeepAnalysisServiceRequestAnalysis:
             assert saved_entity.job_description_id == sample_jd.id
             assert saved_entity.status == AnalysisStatus.PENDING
 
-            mock_task.delay.assert_called_once_with(str(saved_analysis.id))
+            mock_task.delay.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_request_raises_when_jd_not_found(
@@ -183,9 +181,7 @@ class TestDeepAnalysisServiceRequestAnalysis:
                 job_description_id=sample_jd.id,
             )
 
-        with patch(
-            "app.application.services.deep_analysis_service.run_deep_analysis_task"
-        ) as mock_task:
+        with patch("app.tasks.deep_analysis_tasks.run_deep_analysis") as mock_task:
             mock_task.delay.assert_not_called()
 
 

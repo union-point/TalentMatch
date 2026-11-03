@@ -43,6 +43,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  beat:
+    build: .
+    command: uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   app:
     build: .
     ports:

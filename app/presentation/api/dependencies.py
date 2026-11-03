@@ -44,7 +44,9 @@ async def get_fast_track_service(
         provider=settings.ai_fast_track_provider,
         model=settings.ai_fast_track_model,
     )
-    yield FastTrackService(jd_repo, resume_repo, fast_track_repo, ai_service)
+    yield FastTrackService(
+        jd_repo, resume_repo, fast_track_repo, ai_service, session.begin_nested
+    )
 
 
 async def get_dashboard_service(

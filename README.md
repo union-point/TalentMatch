@@ -75,6 +75,8 @@ make dev               # uvicorn --reload :8000
 
 # separate terminal — required for deep analysis
 uv run celery -A app.tasks.celery_app:celery_app worker --loglevel=info
+# In another terminal:
+uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info
 ```
 
 ## Configuration
@@ -182,5 +184,5 @@ Local tests without Docker app container: `uv run pytest` (integration tests nee
 ## Notes
 
 - Docling downloads model artifacts on first parse (cold start).
-- Deep analysis requires a running Celery worker and Redis.
+- Deep analysis requires a running Celery worker, Celery beat, and Redis. Run exactly one beat scheduler. Committed pending analyses are dispatched every 30 seconds and retried after publication failures; duplicate deliveries are ignored by an atomic worker claim. No schema migration is required. A worker process crash after claiming a job still requires manual recovery of its IN_PROGRESS record.
 - Alembic migrations need a live Postgres instance.

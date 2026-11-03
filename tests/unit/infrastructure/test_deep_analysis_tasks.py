@@ -67,7 +67,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -125,7 +125,7 @@ class TestDeepAnalysisTaskAsync:
         assert pending_analysis.raw_response is not None
         assert pending_analysis.error_message is None
 
-        assert deep_repo.save.await_count == 2
+        assert deep_repo.save.await_count == 1
         mock_session.commit.assert_awaited()
 
     @pytest.mark.asyncio
@@ -136,7 +136,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=None)
+        deep_repo.claim_pending = AsyncMock(return_value=None)
         deep_repo.save = AsyncMock()
         resume_repo = MagicMock()
         jd_repo = MagicMock()
@@ -179,7 +179,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=None)
@@ -227,7 +227,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -275,7 +275,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -330,7 +330,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -382,8 +382,8 @@ class TestDeepAnalysisTaskAsync:
 
             await _run_deep_analysis_async(str(pending_analysis.id))
 
-        assert statuses[0] == AnalysisStatus.IN_PROGRESS
-        assert statuses[1] == AnalysisStatus.COMPLETED
+        assert statuses == [AnalysisStatus.COMPLETED]
+        deep_repo.claim_pending.assert_awaited_once_with(pending_analysis.id)
 
     @pytest.mark.asyncio
     async def test_uses_factory_with_correct_settings(
@@ -397,7 +397,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -462,7 +462,7 @@ class TestDeepAnalysisTaskAsync:
         mock_session.__aexit__ = AsyncMock(return_value=False)
 
         deep_repo = MagicMock()
-        deep_repo.get_by_id = AsyncMock(return_value=pending_analysis)
+        deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
         deep_repo.save = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
@@ -511,3 +511,22 @@ class TestDeepAnalysisTaskAsync:
             job_description=sample_jd.normalized_content,
             resume=sample_resume.normalized_content,
         )
+
+
+async def test_dispatch_retries_publication_failures_without_consuming_pending_intent():
+    from app.tasks.deep_analysis_tasks import _dispatch_pending_deep_analyses_async
+
+    ids = [uuid.uuid4(), uuid.uuid4()]
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    session.scalars.side_effect = [ids, ids]
+    with (
+        patch("app.tasks.deep_analysis_tasks.AsyncSession", return_value=session),
+        patch("app.tasks.deep_analysis_tasks.engine", _make_mock_engine()),
+        patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay") as publish,
+    ):
+        publish.side_effect = [RuntimeError("broker down"), None, None, None]
+        await _dispatch_pending_deep_analyses_async()
+        await _dispatch_pending_deep_analyses_async()
+    assert [c.args[0] for c in publish.call_args_list] == [str(i) for i in ids + ids]
+    session.commit.assert_not_awaited()

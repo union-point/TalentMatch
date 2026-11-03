@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.deep_analysis import DeepAnalysis
@@ -42,6 +42,20 @@ class SQLAlchemyDeepAnalysisRepository(DeepAnalysisRepository):
         await self._session.refresh(model)
 
         return self._to_domain(model)
+
+    async def claim_pending(self, analysis_id: uuid.UUID) -> DeepAnalysis | None:
+        """Atomically claim a pending job; duplicate deliveries do no work."""
+        result = await self._session.execute(
+            update(DeepAnalysisModel)
+            .where(
+                DeepAnalysisModel.id == analysis_id,
+                DeepAnalysisModel.status == AnalysisStatus.PENDING.value,
+            )
+            .values(status=AnalysisStatus.IN_PROGRESS.value)
+            .returning(DeepAnalysisModel)
+        )
+        model = result.scalar_one_or_none()
+        return self._to_domain(model) if model is not None else None
 
     async def get_by_id(self, analysis_id: uuid.UUID) -> DeepAnalysis | None:
         result = await self._session.execute(

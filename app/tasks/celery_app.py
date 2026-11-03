@@ -12,6 +12,12 @@ celery_app = Celery(
 celery_app.autodiscover_tasks(["app.tasks"], related_name="deep_analysis_tasks")
 
 celery_app.conf.update(
+    beat_schedule={
+        "dispatch-pending-deep-analyses": {
+            "task": "tasks.dispatch_pending_deep_analyses",
+            "schedule": 30.0,
+        },
+    },
     task_serializer="json",
     accept_content=["json"],
     result_serializer="json",

@@ -1,9 +1,11 @@
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
+from contextlib import AbstractAsyncContextManager
 
 from app.application.dto.analysis import FastTrackResultDTO
-from app.core.exceptions import AIResponseError, JobDescriptionNotFoundError
+from app.core.exceptions import JobDescriptionNotFoundError
 from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.ports.ai_service import AIService
 from app.domain.ports.repository import (
@@ -24,11 +26,14 @@ class FastTrackService:
         resume_repository: ResumeRepository,
         fast_track_repository: FastTrackRepository,
         ai_service: AIService,
+        transaction: Callable[[], AbstractAsyncContextManager[object]],
     ) -> None:
         self._jd_repository = jd_repository
         self._resume_repository = resume_repository
         self._fast_track_repository = fast_track_repository
         self._ai_service = ai_service
+        self._transaction = transaction
+        self._db_lock = asyncio.Lock()
 
     async def run_fast_track(
         self,
@@ -67,7 +72,21 @@ class FastTrackService:
         jd_id: uuid.UUID,
         resume_id: uuid.UUID,
     ) -> FastTrackResultDTO:
-        resume = await self._resume_repository.get_by_id(resume_id)
+        try:
+            return await self._analyze_single_impl(semaphore, jd_text, jd_id, resume_id)
+        except Exception as exc:
+            logger.exception("Fast-track failed for resume %s", resume_id)
+            return FastTrackResultDTO(resume_id=resume_id, error=str(exc))
+
+    async def _analyze_single_impl(
+        self,
+        semaphore: asyncio.Semaphore,
+        jd_text: str,
+        jd_id: uuid.UUID,
+        resume_id: uuid.UUID,
+    ) -> FastTrackResultDTO:
+        async with self._db_lock, self._transaction():
+            resume = await self._resume_repository.get_by_id(resume_id)
         if resume is None:
             logger.warning("Resume %s not found; skipping.", resume_id)
             return FastTrackResultDTO(
@@ -83,7 +102,7 @@ class FastTrackService:
                     job_description=jd_text,
                     resume=resume.normalized_content,
                 )
-            except (AIResponseError, Exception) as exc:
+            except Exception as exc:
                 logger.error(
                     "Fast-track analysis failed for resume %s: %s",
                     resume_id,
@@ -95,20 +114,21 @@ class FastTrackService:
                     injection_warning=injection_warning,
                 )
 
-        if data.candidate_name and not resume.candidate_name:
-            resume.candidate_name = data.candidate_name
-            await self._resume_repository.update(resume)
+        async with self._db_lock, self._transaction():
+            if data.candidate_name and not resume.candidate_name:
+                resume.candidate_name = data.candidate_name
+                await self._resume_repository.update(resume)
 
-        entity = FastTrackResult(
-            resume_id=resume_id,
-            job_description_id=jd_id,
-            pass_fail=data.pass_fail,
-            score=data.score,
-            explanation=data.explanation,
-            raw_response=data.model_dump(),
-        )
+            entity = FastTrackResult(
+                resume_id=resume_id,
+                job_description_id=jd_id,
+                pass_fail=data.pass_fail,
+                score=data.score,
+                explanation=data.explanation,
+                raw_response=data.model_dump(),
+            )
 
-        saved = await self._fast_track_repository.save(entity)
+            saved = await self._fast_track_repository.save(entity)
 
         if injection_warning:
             logger.warning(
