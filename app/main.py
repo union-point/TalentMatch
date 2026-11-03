@@ -35,6 +35,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware added later wraps middleware added earlier.
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -45,7 +47,6 @@ app.add_middleware(
 
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(TimingMiddleware)
-app.add_middleware(RateLimitMiddleware)
 
 app.add_exception_handler(Exception, global_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)

@@ -1,8 +1,7 @@
 import time
 import uuid
-from collections.abc import Callable
 
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.logging_config import request_id_var
 
@@ -15,36 +14,39 @@ class RequestIDMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
         request_id = str(uuid.uuid4())
-        request_id_var.set(request_id)
+        token = request_id_var.set(request_id)
 
-        async def send_with_id(message: dict) -> None:
+        async def send_with_id(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
                 headers.append((b"X-Request-ID", request_id.encode()))
                 message["headers"] = headers
             await send(message)
 
-        await self.app(scope, receive, send_with_id)
+        try:
+            await self.app(scope, receive, send_with_id)
+        finally:
+            request_id_var.reset(token)
 
 
 class TimingMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
         start = time.monotonic()
 
-        async def send_with_timing(message: dict) -> None:
+        async def send_with_timing(message: Message) -> None:
             if message["type"] == "http.response.start":
                 elapsed = time.monotonic() - start
                 headers = list(message.get("headers", []))
@@ -62,7 +64,7 @@ class RateLimitMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
 
-    async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -85,26 +87,7 @@ class RateLimitMiddleware:
                 request_id_var.get(),
             )
 
-            async def send_429(message: dict) -> None:
-                if message["type"] == "http.response.start":
-                    message["status"] = resp.status_code
-                    headers = list(message.get("headers", []))
-                    for k, v in resp.headers.items():
-                        if k.lower() not in ("content-length", "content-type"):
-                            headers.append((
-                                k.lower().encode(),
-                                v.encode() if isinstance(v, str) else v,
-                            ))
-                    headers.append((b"content-type", b"application/json"))
-                    message["headers"] = headers
-                    message["body"] = resp.body
-                await send(message)
-
-            await send_429({
-                "type": "http.response.start",
-                "status": 429,
-                "headers": [],
-            })
+            await resp(scope, receive, send)
             return
 
         history.append(now)
