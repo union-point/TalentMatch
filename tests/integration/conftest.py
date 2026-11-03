@@ -1,26 +1,41 @@
+import os
 import tempfile
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 from app.config import settings
 from app.infrastructure.persistence.models.base import Base
+from tests.integration.database import validate_test_database_url
 
 
 @pytest_asyncio.fixture
-async def engine():
-    test_db_url = settings.database_url.replace("talentmatch_db", "talentmatch_test")
+async def engine() -> AsyncGenerator[AsyncEngine, None]:
+    configured_url = os.environ.get("TEST_DATABASE_URL")
+    if not configured_url:
+        pytest.skip("Set TEST_DATABASE_URL to a dedicated PostgreSQL database ending in '_test'")
+    test_db_url = validate_test_database_url(configured_url, settings.database_url)
     eng = create_async_engine(test_db_url, echo=False)
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
-    yield eng
-    async with eng.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-    await eng.dispose()
+    try:
+        async with eng.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        try:
+            yield eng
+        finally:
+            async with eng.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+    finally:
+        await eng.dispose()
 
 
 @pytest_asyncio.fixture
