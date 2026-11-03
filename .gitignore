@@ -91,13 +91,8 @@ docs/_build/
 site/
 
 # Project meta / agent files
-AGENTS.md
-PROGRESS.md
 PROGRESS_frontend.md
 docs/
-.agents/
-skills-lock.json
-frontend/PROGRESS_frontend.md
 frontend/FRONTEND_PLAN.md
 
 
