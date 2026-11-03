@@ -76,7 +76,9 @@ async def test_duplicate_claims_and_terminal_redelivery_do_no_work(dispatch_engi
         assert await repo.claim_pending(analysis.id) is None
 
 
-async def test_recovery_expires_only_stale_claims_and_rejects_late_results(dispatch_engine):
+async def test_recovery_expires_only_stale_claims_and_rejects_late_results(
+    dispatch_engine: AsyncEngine,
+) -> None:
     from datetime import datetime, timedelta, timezone
 
     from sqlalchemy import update

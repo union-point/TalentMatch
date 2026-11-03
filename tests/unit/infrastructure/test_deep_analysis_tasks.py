@@ -12,12 +12,12 @@ from app.domain.value_objects import AnalysisStatus
 
 @pytest.mark.parametrize("stage", ["lookup", "factory", "save", "commit", "timeout"])
 async def test_post_claim_failures_are_recorded_after_rollback(
-    stage,
-    pending_analysis,
-    sample_resume,
-    sample_jd,
-    monkeypatch,
-):
+    stage: str,
+    pending_analysis: DeepAnalysis,
+    sample_resume: Resume,
+    sample_jd: JobDescription,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import asyncio
 
     from app.tasks import deep_analysis_tasks as tasks
@@ -47,7 +47,7 @@ async def test_post_claim_failures_are_recorded_after_rollback(
     elif stage == "timeout":
         monkeypatch.setattr(tasks.settings, "deep_analysis_timeout_seconds", 0.01)
 
-        async def stalled(**kwargs):
+        async def stalled(**kwargs: object) -> None:
             await asyncio.Event().wait()
 
         ai.analyze_deep.side_effect = stalled
