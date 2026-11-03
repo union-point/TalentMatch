@@ -5,7 +5,7 @@ from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
 from app.application.dto.analysis import FastTrackResultDTO
-from app.core.exceptions import JobDescriptionNotFoundError
+from app.core.exceptions import JobDescriptionNotFoundError, public_error_message
 from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.ports.ai_service import AIService
 from app.domain.ports.repository import (
@@ -76,7 +76,7 @@ class FastTrackService:
             return await self._analyze_single_impl(semaphore, jd_text, jd_id, resume_id)
         except Exception as exc:
             logger.exception("Fast-track failed for resume %s", resume_id)
-            return FastTrackResultDTO(resume_id=resume_id, error=str(exc))
+            return FastTrackResultDTO(resume_id=resume_id, error=public_error_message(exc))
 
     async def _analyze_single_impl(
         self,
@@ -110,7 +110,7 @@ class FastTrackService:
                 )
                 return FastTrackResultDTO(
                     resume_id=resume_id,
-                    error=str(exc),
+                    error=public_error_message(exc),
                     injection_warning=injection_warning,
                 )
 

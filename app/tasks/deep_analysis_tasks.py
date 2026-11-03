@@ -8,6 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.core.exceptions import (
+    JobDescriptionNotFoundError,
+    ResumeNotFoundError,
+    public_error_message,
+)
 from app.domain.value_objects import AnalysisStatus
 from app.infrastructure.ai import AIServiceFactory
 from app.infrastructure.persistence.database import engine
@@ -50,8 +55,10 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
             async with asyncio.timeout(settings.deep_analysis_timeout_seconds):
                 resume = await resume_repo.get_by_id(analysis.resume_id)
                 jd = await jd_repo.get_by_id(analysis.job_description_id)
-                if resume is None or jd is None:
-                    raise ValueError("Referenced resume or job description not found")
+                if resume is None:
+                    raise ResumeNotFoundError(analysis.resume_id)
+                if jd is None:
+                    raise JobDescriptionNotFoundError(analysis.job_description_id)
 
                 ai_service = AIServiceFactory.create(
                     provider=settings.ai_deep_analysis_provider,
@@ -75,7 +82,7 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
             logger.exception("Deep analysis %s failed", analysis_id)
             await session.rollback()
             analysis.status = AnalysisStatus.FAILED
-            analysis.error_message = str(exc) or "Analysis timed out"
+            analysis.error_message = public_error_message(exc)
             # A failed transaction must be rolled back before recording its failure.
             # If the database remains unavailable, the recovery task expires the claim.
             await deep_repo.finish_claim(analysis)

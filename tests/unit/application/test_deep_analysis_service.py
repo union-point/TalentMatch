@@ -271,7 +271,7 @@ class TestDeepAnalysisServiceGetResult:
 
         assert result.status == AnalysisStatus.FAILED
         assert result.result is None
-        assert result.error == "Gemini API timeout"
+        assert result.error == "Analysis failed. Please try again."
 
     @pytest.mark.asyncio
     async def test_get_result_raises_when_not_found(

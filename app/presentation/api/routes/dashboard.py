@@ -4,7 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
 
 from app.application.services.dashboard_service import DashboardService
-from app.core.exceptions import JobDescriptionNotFoundError, ResumeNotFoundError
+from app.core.exceptions import (
+    ANALYSIS_FAILURE_MESSAGE,
+    JobDescriptionNotFoundError,
+    ResumeNotFoundError,
+)
 from app.presentation.api.dependencies import get_dashboard_service
 from app.presentation.schemas.dashboard import (
     CandidateDetailSchema,
@@ -111,7 +115,9 @@ async def get_candidate_detail(
             weaknesses=detail.deep_analysis.weaknesses,
             risks=detail.deep_analysis.risks,
             detailed_reasoning=detail.deep_analysis.detailed_reasoning,
-            error_message=detail.deep_analysis.error_message,
+            error_message=(
+                ANALYSIS_FAILURE_MESSAGE if detail.deep_analysis.error_message else None
+            ),
         )
 
     return CandidateDetailSchema(

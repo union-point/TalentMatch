@@ -20,11 +20,13 @@ class RequestIDMiddleware:
             return
 
         request_id = str(uuid.uuid4())
+        scope.setdefault("state", {})["request_id"] = request_id
         token = request_id_var.set(request_id)
 
         async def send_with_id(message: Message) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
+                headers = [(key, value) for key, value in headers if key.lower() != b"x-request-id"]
                 headers.append((b"X-Request-ID", request_id.encode()))
                 message["headers"] = headers
             await send(message)
@@ -50,10 +52,12 @@ class TimingMiddleware:
             if message["type"] == "http.response.start":
                 elapsed = time.monotonic() - start
                 headers = list(message.get("headers", []))
-                headers.append((
-                    b"X-Response-Time-Ms",
-                    str(round(elapsed * 1000)).encode(),
-                ))
+                headers.append(
+                    (
+                        b"X-Response-Time-Ms",
+                        str(round(elapsed * 1000)).encode(),
+                    )
+                )
                 message["headers"] = headers
             await send(message)
 
@@ -82,8 +86,7 @@ class RateLimitMiddleware:
             resp = _make_problem_response(
                 429,
                 "RateLimitExceeded",
-                f"Too many requests. Limit: {RATE_LIMIT_MAX_REQUESTS} per "
-                f"{RATE_LIMIT_WINDOW:.0f}s",
+                f"Too many requests. Limit: {RATE_LIMIT_MAX_REQUESTS} per {RATE_LIMIT_WINDOW:.0f}s",
                 request_id_var.get(),
             )
 

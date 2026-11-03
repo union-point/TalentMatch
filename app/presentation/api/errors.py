@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import (
@@ -12,6 +13,7 @@ from app.core.exceptions import (
     ParsingError,
     ResumeNotFoundError,
     UnsupportedFileTypeError,
+    public_error_message,
 )
 from app.core.logging_config import request_id_var
 
@@ -46,27 +48,28 @@ def _make_problem_response(
         body["trace_id"] = request_id
     if extra:
         body["extra"] = extra
-    return JSONResponse(status_code=status, content=body)
+    return JSONResponse(
+        status_code=status,
+        content=body,
+        headers={"X-Request-ID": request_id} if request_id else None,
+    )
 
 
 async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    request_id = request_id_var.get()
+    request_id = getattr(request.state, "request_id", None) or request_id_var.get()
 
     status = HTTP_STATUS_MAP.get(type(exc), 500)
-    title = exc.__class__.__name__
-    detail = str(exc)
+    title = "InternalServerError" if status == 500 else exc.__class__.__name__
+    detail = public_error_message(exc)
 
     extra: dict[str, object] | None = None
     if isinstance(exc, InjectionDetectedError):
         extra = exc.details
-    elif isinstance(exc, AIResponseError):
-        if exc.raw_response is not None:
-            extra = {"raw_response_preview": str(exc.raw_response)[:500]}
     elif isinstance(exc, UnsupportedFileTypeError):
         extra = {"file_type": exc.file_type}
 
     if status == 500:
-        logger.exception("Unhandled exception: %s", exc)
+        logger.error("Unhandled exception (trace=%s)", request_id, exc_info=exc)
     else:
         logger.warning(
             "Request error (trace=%s): %s - %s",
@@ -79,7 +82,16 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 async def validation_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    request_id = request_id_var.get()
-    detail = str(exc)
-    logger.warning("Validation error (trace=%s): %s", request_id, detail)
-    return _make_problem_response(422, "ValidationError", detail, request_id)
+    request_id = getattr(request.state, "request_id", None) or request_id_var.get()
+    extra: dict[str, object] | None = None
+    if isinstance(exc, RequestValidationError):
+        extra = {
+            "errors": [
+                {"field": ".".join(str(part) for part in error["loc"]), "type": error["type"]}
+                for error in exc.errors()
+            ]
+        }
+    logger.warning("Request validation failed (trace=%s)", request_id)
+    return _make_problem_response(
+        422, "ValidationError", "Request validation failed.", request_id, extra
+    )

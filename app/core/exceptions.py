@@ -1,5 +1,7 @@
 import uuid
 
+ANALYSIS_FAILURE_MESSAGE = "Analysis failed. Please try again."
+
 
 class AppError(Exception):
     """Base exception for the application."""
@@ -68,3 +70,25 @@ class AnalysisNotFoundError(AppError):
     def __init__(self, analysis_id: uuid.UUID) -> None:
         self.analysis_id = analysis_id
         super().__init__(f"Analysis not found: {analysis_id}")
+
+
+def public_error_message(exc: Exception) -> str:
+    """Expose only known, safe messages; internal exception text stays in logs."""
+    if isinstance(
+        exc,
+        (
+            ResumeNotFoundError,
+            JobDescriptionNotFoundError,
+            AnalysisNotFoundError,
+            UnsupportedFileTypeError,
+            InjectionDetectedError,
+        ),
+    ):
+        return str(exc)
+    if isinstance(exc, ParsingError):
+        return "Could not parse the uploaded document."
+    if isinstance(exc, FileNotFoundError):
+        return "File not found."
+    if isinstance(exc, AIResponseError):
+        return ANALYSIS_FAILURE_MESSAGE
+    return "An unexpected error occurred. Please try again."

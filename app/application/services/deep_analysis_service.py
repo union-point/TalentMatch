@@ -3,6 +3,7 @@ import uuid
 
 from app.application.dto.analysis import DeepAnalysisResultDTO
 from app.core.exceptions import (
+    ANALYSIS_FAILURE_MESSAGE,
     AnalysisNotFoundError,
     JobDescriptionNotFoundError,
     ResumeNotFoundError,
@@ -73,5 +74,5 @@ class DeepAnalysisService:
             analysis_id=analysis.id,
             status=analysis.status,
             result=analysis if analysis.status == AnalysisStatus.COMPLETED else None,
-            error=analysis.error_message,
+            error=ANALYSIS_FAILURE_MESSAGE if analysis.error_message else None,
         )

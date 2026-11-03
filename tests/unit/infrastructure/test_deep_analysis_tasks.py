@@ -375,7 +375,7 @@ class TestDeepAnalysisTaskAsync:
 
         assert pending_analysis.status == AnalysisStatus.FAILED
         assert pending_analysis.error_message is not None
-        assert "API connection failed" in pending_analysis.error_message
+        assert pending_analysis.error_message == "An unexpected error occurred. Please try again."
         mock_session.commit.assert_awaited()
 
     @pytest.mark.asyncio
