@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest_asyncio
 from sqlalchemy import JSON, MetaData
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.value_objects import AnalysisStatus
@@ -73,3 +73,39 @@ async def test_duplicate_claims_and_terminal_redelivery_do_no_work(dispatch_engi
         await repo.save(first)
         await session.commit()
         assert await repo.claim_pending(analysis.id) is None
+
+
+async def test_pair_lookup_selects_latest_attempt_with_deterministic_ties(
+    dispatch_engine: AsyncEngine,
+) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
+
+    resume_id, jd_id = uuid.uuid4(), uuid.uuid4()
+    now = datetime.now(timezone.utc)
+    async with AsyncSession(dispatch_engine) as session:
+        repo = SQLAlchemyDeepAnalysisRepository(session)
+        assert await repo.get_by_resume_and_jd(resume_id, jd_id) is None
+        for number, created_at, status in [
+            (3, now - timedelta(days=1), AnalysisStatus.COMPLETED),
+            (1, now, AnalysisStatus.FAILED),
+            (2, now, AnalysisStatus.PENDING),
+        ]:
+            session.add(
+                DeepAnalysisModel(
+                    id=uuid.UUID(int=15 * 2**124 + number),
+                    resume_id=resume_id,
+                    job_description_id=jd_id,
+                    created_at=created_at,
+                    status=status.value,
+                )
+            )
+        await session.flush()
+        latest = await repo.get_by_resume_and_jd(resume_id, jd_id)
+        assert latest is not None
+        assert latest.id == uuid.UUID(int=15 * 2**124 + 2)
+        assert latest.status == AnalysisStatus.PENDING
+        assert await repo.get_by_resume_and_jd(uuid.uuid4(), jd_id) is None
+        assert await repo.get_by_resume_and_jd(resume_id, uuid.uuid4()) is None
+        assert await repo.get_by_id(uuid.UUID(int=15 * 2**124 + 3)) is not None

@@ -70,10 +70,13 @@ class SQLAlchemyDeepAnalysisRepository(DeepAnalysisRepository):
         self, resume_id: uuid.UUID, jd_id: uuid.UUID
     ) -> DeepAnalysis | None:
         result = await self._session.execute(
-            select(DeepAnalysisModel).where(
+            select(DeepAnalysisModel)
+            .where(
                 DeepAnalysisModel.resume_id == resume_id,
                 DeepAnalysisModel.job_description_id == jd_id,
             )
+            .order_by(DeepAnalysisModel.created_at.desc(), DeepAnalysisModel.id.desc())
+            .limit(1)
         )
         model = result.scalar_one_or_none()
         if model is None:
