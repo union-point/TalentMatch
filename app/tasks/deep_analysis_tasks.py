@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from celery import Task as CeleryTask
 from sqlalchemy import select
@@ -45,41 +46,40 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
 
         await session.commit()
 
-        resume = await resume_repo.get_by_id(analysis.resume_id)
-        jd = await jd_repo.get_by_id(analysis.job_description_id)
-
-        if resume is None or jd is None:
-            analysis.status = AnalysisStatus.FAILED
-            analysis.error_message = "Referenced resume or job description not found"
-            await deep_repo.save(analysis)
-            await session.commit()
-            logger.error("Deep analysis %s failed: resume or JD not found", analysis_id)
-            return
-
-        ai_service = AIServiceFactory.create(
-            provider=settings.ai_deep_analysis_provider,
-            model=settings.ai_deep_analysis_model,
-        )
         try:
-            data = await ai_service.analyze_deep(
-                job_description=jd.normalized_content,
-                resume=resume.normalized_content,
-            )
-            analysis.overall_score = data.overall_score
-            analysis.strengths = data.strengths
-            analysis.weaknesses = data.weaknesses
-            analysis.risks = data.risks
-            analysis.detailed_reasoning = data.detailed_reasoning
-            analysis.evidence = [e.model_dump() for e in data.evidence]
-            analysis.raw_response = data.model_dump()
-            analysis.status = AnalysisStatus.COMPLETED
-        except Exception as exc:
-            logger.error("Deep analysis %s failed: %s", analysis_id, exc, exc_info=True)
-            analysis.status = AnalysisStatus.FAILED
-            analysis.error_message = str(exc)
+            async with asyncio.timeout(settings.deep_analysis_timeout_seconds):
+                resume = await resume_repo.get_by_id(analysis.resume_id)
+                jd = await jd_repo.get_by_id(analysis.job_description_id)
+                if resume is None or jd is None:
+                    raise ValueError("Referenced resume or job description not found")
 
-        await deep_repo.save(analysis)
-        await session.commit()
+                ai_service = AIServiceFactory.create(
+                    provider=settings.ai_deep_analysis_provider,
+                    model=settings.ai_deep_analysis_model,
+                )
+                data = await ai_service.analyze_deep(
+                    job_description=jd.normalized_content,
+                    resume=resume.normalized_content,
+                )
+                analysis.overall_score = data.overall_score
+                analysis.strengths = data.strengths
+                analysis.weaknesses = data.weaknesses
+                analysis.risks = data.risks
+                analysis.detailed_reasoning = data.detailed_reasoning
+                analysis.evidence = [e.model_dump() for e in data.evidence]
+                analysis.raw_response = data.model_dump()
+                analysis.status = AnalysisStatus.COMPLETED
+                await deep_repo.finish_claim(analysis)
+                await session.commit()
+        except Exception as exc:
+            logger.exception("Deep analysis %s failed", analysis_id)
+            await session.rollback()
+            analysis.status = AnalysisStatus.FAILED
+            analysis.error_message = str(exc) or "Analysis timed out"
+            # A failed transaction must be rolled back before recording its failure.
+            # If the database remains unavailable, the recovery task expires the claim.
+            await deep_repo.finish_claim(analysis)
+            await session.commit()
 
 
 @celery_app.task(name="tasks.dispatch_pending_deep_analyses")  # type: ignore[untyped-decorator]
@@ -106,3 +106,18 @@ async def _dispatch_pending_deep_analyses_async() -> None:
             await asyncio.to_thread(run_deep_analysis.delay, str(analysis_id))
         except Exception:
             logger.exception("Publication failed for %s; will retry next sweep", analysis_id)
+
+
+@celery_app.task(name="tasks.recover_expired_deep_analyses")  # type: ignore[untyped-decorator]
+def recover_expired_deep_analyses() -> None:
+    asyncio.run(_recover_expired_deep_analyses_async())
+
+
+async def _recover_expired_deep_analyses_async() -> None:
+    await engine.dispose()
+    async with AsyncSession(engine) as session:
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            seconds=settings.deep_analysis_timeout_seconds + 60
+        )
+        await SQLAlchemyDeepAnalysisRepository(session).fail_expired_claims(cutoff)
+        await session.commit()

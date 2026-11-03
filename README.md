@@ -184,5 +184,5 @@ Local tests without Docker app container: `uv run pytest` (integration tests nee
 ## Notes
 
 - Docling downloads model artifacts on first parse (cold start).
-- Deep analysis requires a running Celery worker, Celery beat, and Redis. Run exactly one beat scheduler. Committed pending analyses are dispatched every 30 seconds and retried after publication failures; duplicate deliveries are ignored by an atomic worker claim. No schema migration is required. A worker process crash after claiming a job still requires manual recovery of its IN_PROGRESS record.
+- Deep analysis requires a running Celery worker, Celery beat, and Redis. Run exactly one beat scheduler. Committed pending analyses are dispatched every 30 seconds and retried after publication failures; duplicate deliveries are ignored by an atomic worker claim. No schema migration is required. Claimed jobs have a configurable `DEEP_ANALYSIS_TIMEOUT_SECONDS` budget (default 240 seconds). A periodic recovery task marks abandoned claims failed after that budget plus 60 seconds; users can explicitly retry. Late worker results cannot overwrite recovered failures.
 - Alembic migrations need a live Postgres instance.

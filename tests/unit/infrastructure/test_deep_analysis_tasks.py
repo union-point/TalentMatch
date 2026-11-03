@@ -10,6 +10,66 @@ from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
 
 
+@pytest.mark.parametrize("stage", ["lookup", "factory", "save", "commit", "timeout"])
+async def test_post_claim_failures_are_recorded_after_rollback(
+    stage,
+    pending_analysis,
+    sample_resume,
+    sample_jd,
+    monkeypatch,
+):
+    import asyncio
+
+    from app.tasks import deep_analysis_tasks as tasks
+
+    session = AsyncMock()
+    session.__aenter__.return_value = session
+    deep = AsyncMock()
+    deep.claim_pending.return_value = pending_analysis
+    resumes, jobs, ai = AsyncMock(), AsyncMock(), AsyncMock()
+    resumes.get_by_id.return_value = sample_resume
+    jobs.get_by_id.return_value = sample_jd
+    ai.analyze_deep.return_value = DeepAnalysisData(
+        overall_score=80,
+        strengths=[],
+        weaknesses=[],
+        risks=[],
+        detailed_reasoning="Match",
+        evidence=[],
+    )
+    failure = RuntimeError("infrastructure unavailable")
+    if stage == "lookup":
+        resumes.get_by_id.side_effect = failure
+    elif stage == "save":
+        deep.finish_claim.side_effect = [failure, True]
+    elif stage == "commit":
+        session.commit.side_effect = [None, failure, None]
+    elif stage == "timeout":
+        monkeypatch.setattr(tasks.settings, "deep_analysis_timeout_seconds", 0.01)
+
+        async def stalled(**kwargs):
+            await asyncio.Event().wait()
+
+        ai.analyze_deep.side_effect = stalled
+
+    with (
+        patch.object(tasks, "engine", _make_mock_engine()),
+        patch.object(tasks, "AsyncSession", return_value=session),
+        patch.object(tasks, "SQLAlchemyDeepAnalysisRepository", return_value=deep),
+        patch.object(tasks, "SQLAlchemyResumeRepository", return_value=resumes),
+        patch.object(tasks, "SQLAlchemyJobDescriptionRepository", return_value=jobs),
+        patch.object(tasks.AIServiceFactory, "create", return_value=ai) as factory,
+    ):
+        if stage == "factory":
+            factory.side_effect = failure
+        await tasks._run_deep_analysis_async(str(pending_analysis.id))
+
+    session.rollback.assert_awaited_once()
+    assert pending_analysis.status == AnalysisStatus.FAILED
+    assert pending_analysis.error_message
+    assert deep.finish_claim.await_args.args[0].status == AnalysisStatus.FAILED
+
+
 def _make_mock_engine() -> AsyncMock:
     engine = AsyncMock()
     engine.dispose = AsyncMock()
@@ -68,7 +128,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()
@@ -125,7 +185,7 @@ class TestDeepAnalysisTaskAsync:
         assert pending_analysis.raw_response is not None
         assert pending_analysis.error_message is None
 
-        assert deep_repo.save.await_count == 1
+        assert deep_repo.finish_claim.await_count == 1
         mock_session.commit.assert_awaited()
 
     @pytest.mark.asyncio
@@ -137,7 +197,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=None)
-        deep_repo.save = AsyncMock()
+        deep_repo.finish_claim = AsyncMock()
         resume_repo = MagicMock()
         jd_repo = MagicMock()
 
@@ -166,7 +226,7 @@ class TestDeepAnalysisTaskAsync:
 
             await _run_deep_analysis_async(str(fake_id))
 
-        deep_repo.save.assert_not_awaited()
+        deep_repo.finish_claim.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_resume_not_found_marks_failed(
@@ -180,7 +240,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=None)
         jd_repo = MagicMock()
@@ -228,7 +288,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()
@@ -276,7 +336,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()
@@ -331,7 +391,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()
@@ -352,7 +412,7 @@ class TestDeepAnalysisTaskAsync:
         def track_status(analysis: DeepAnalysis) -> None:
             statuses.append(analysis.status)
 
-        deep_repo.save.side_effect = track_status
+        deep_repo.finish_claim.side_effect = track_status
 
         mock_engine = _make_mock_engine()
 
@@ -398,7 +458,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()
@@ -439,6 +499,7 @@ class TestDeepAnalysisTaskAsync:
         ):
             mock_settings.ai_deep_analysis_provider = "gemini"
             mock_settings.ai_deep_analysis_model = "gemini-3.5-flash"
+            mock_settings.deep_analysis_timeout_seconds = 240
             mock_factory.create.return_value = mock_ai_service
 
             from app.tasks.deep_analysis_tasks import _run_deep_analysis_async
@@ -463,7 +524,7 @@ class TestDeepAnalysisTaskAsync:
 
         deep_repo = MagicMock()
         deep_repo.claim_pending = AsyncMock(return_value=pending_analysis)
-        deep_repo.save = AsyncMock(return_value=pending_analysis)
+        deep_repo.finish_claim = AsyncMock(return_value=pending_analysis)
         resume_repo = MagicMock()
         resume_repo.get_by_id = AsyncMock(return_value=sample_resume)
         jd_repo = MagicMock()

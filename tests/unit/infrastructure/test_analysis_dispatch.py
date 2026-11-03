@@ -69,10 +69,48 @@ async def test_duplicate_claims_and_terminal_redelivery_do_no_work(dispatch_engi
     async with AsyncSession(dispatch_engine) as session:
         repo = SQLAlchemyDeepAnalysisRepository(session)
         assert await repo.claim_pending(analysis.id) is None
+
         first.status = AnalysisStatus.COMPLETED
         await repo.save(first)
         await session.commit()
         assert await repo.claim_pending(analysis.id) is None
+
+
+async def test_recovery_expires_only_stale_claims_and_rejects_late_results(dispatch_engine):
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update
+
+    from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
+    from app.tasks.deep_analysis_tasks import _recover_expired_deep_analyses_async
+
+    async with AsyncSession(dispatch_engine) as session:
+        repo = SQLAlchemyDeepAnalysisRepository(session)
+        stale, fresh, pending = [
+            DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()) for _ in range(3)
+        ]
+        for analysis in (stale, fresh, pending):
+            await repo.save(analysis)
+        await repo.claim_pending(stale.id)
+        await repo.claim_pending(fresh.id)
+        await session.execute(
+            update(DeepAnalysisModel)
+            .where(DeepAnalysisModel.id == stale.id)
+            .values(updated_at=datetime.now(timezone.utc) - timedelta(hours=1))
+        )
+        await session.commit()
+
+    with patch("app.tasks.deep_analysis_tasks.engine", dispatch_engine):
+        await _recover_expired_deep_analyses_async()
+
+    async with AsyncSession(dispatch_engine) as session:
+        repo = SQLAlchemyDeepAnalysisRepository(session)
+        assert (await repo.get_by_id(stale.id)).status == AnalysisStatus.FAILED
+        assert (await repo.get_by_id(fresh.id)).status == AnalysisStatus.IN_PROGRESS
+        assert (await repo.get_by_id(pending.id)).status == AnalysisStatus.PENDING
+        stale.status = AnalysisStatus.COMPLETED
+        assert not await repo.finish_claim(stale)
+        assert (await repo.get_by_id(stale.id)).status == AnalysisStatus.FAILED
 
 
 async def test_pair_lookup_selects_latest_attempt_with_deterministic_ties(

@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,6 +16,7 @@ class Settings(BaseSettings):
     ai_fast_track_model: str = "gemini-3.1-flash-lite"
     ai_deep_analysis_provider: str = "gemini"
     ai_deep_analysis_model: str = "gemini-3.1-flash-lite"
+    deep_analysis_timeout_seconds: int = Field(default=240, gt=0)
 
     # OpenAI-compatible provider settings (optional)
     openai_api_key: str = ""

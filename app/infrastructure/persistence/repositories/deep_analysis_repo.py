@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,6 +57,43 @@ class SQLAlchemyDeepAnalysisRepository(DeepAnalysisRepository):
         )
         model = result.scalar_one_or_none()
         return self._to_domain(model) if model is not None else None
+
+    async def finish_claim(self, analysis: DeepAnalysis) -> bool:
+        """Finish an active claim without overwriting a recovered terminal record."""
+        result = await self._session.execute(
+            update(DeepAnalysisModel)
+            .where(
+                DeepAnalysisModel.id == analysis.id,
+                DeepAnalysisModel.status == AnalysisStatus.IN_PROGRESS.value,
+            )
+            .values(
+                overall_score=analysis.overall_score,
+                strengths=analysis.strengths,
+                weaknesses=analysis.weaknesses,
+                risks=analysis.risks,
+                detailed_reasoning=analysis.detailed_reasoning,
+                evidence=analysis.evidence,
+                raw_response=analysis.raw_response,
+                status=analysis.status.value,
+                error_message=analysis.error_message,
+            )
+            .returning(DeepAnalysisModel.id)
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def fail_expired_claims(self, cutoff: datetime) -> None:
+        """Bound crash recovery without automatically repeating paid AI work."""
+        await self._session.execute(
+            update(DeepAnalysisModel)
+            .where(
+                DeepAnalysisModel.status == AnalysisStatus.IN_PROGRESS.value,
+                DeepAnalysisModel.updated_at < cutoff,
+            )
+            .values(
+                status=AnalysisStatus.FAILED.value,
+                error_message="Analysis timed out or its worker stopped. Please retry.",
+            )
+        )
 
     async def get_by_id(self, analysis_id: uuid.UUID) -> DeepAnalysis | None:
         result = await self._session.execute(
