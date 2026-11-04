@@ -144,6 +144,13 @@ class OrganizationService:
 
     async def invite_legacy_owner(self, email: str) -> None:
         async with self._transaction() as repo:
+            user = await repo.user_by_email(email)
+            if user and (user.verified_at is None or await repo.membership(user.id)):
+                raise AuthError(
+                    "already_member",
+                    "Use a new account or a verified account without membership.",
+                    409,
+                )
             organization = await repo.organization(LEGACY_ORGANIZATION_ID)
             if (
                 organization is None

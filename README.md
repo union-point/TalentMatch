@@ -196,3 +196,158 @@ streaming, with 1 MiB additional allowance for multipart metadata. Configure
 these limits. Docling accepts at most `MAX_DOCUMENT_PAGES` (default 50) and PDF/image
 conversion uses `DOCUMENT_TIMEOUT_SECONDS` (default 120). Incomplete conversions
 are rejected instead of scoring partial text.
+
+## Authentication and organizations
+
+The browser UI and `/api` must share one public origin. Local Vite already proxies
+`/api` to FastAPI. All hiring endpoints, including resume downloads, require a
+verified account with an active organization membership and completed sign-in.
+Owners must enroll an authenticator app; MFA is optional for members. Both roles
+can use all hiring features. Owners manage invitations and member removal.
+Each account belongs to at most one organization.
+
+Before starting the API or workers, generate an encryption key:
+
+```bash
+uv run python -c 'import json; from cryptography.fernet import Fernet; print("AUTH_ENCRYPTION_KEYS=" + json.dumps([Fernet.generate_key().decode()]))'
+```
+
+Replace `AUTH_ENCRYPTION_KEYS=[]` in `.env` with the generated line. Keep this key
+outside version control and back it up securely: it encrypts authenticator secrets
+and queued email links. All API and worker processes must use the same keys.
+Multiple keys are supported, newest first; retain older keys while stored secrets
+still use them. Do not change keys without preserving decryptability.
+
+For local development, use the settings in `.env.example` and start the mail sink:
+
+```bash
+docker compose up -d postgres redis mailpit
+uv run alembic upgrade head
+make dev
+# Separate terminals:
+uv run celery -A app.tasks.celery_app:celery_app worker --loglevel=info
+uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info
+cd frontend && npm install && npm run dev
+```
+
+Open the UI at `http://localhost:5173` and the local mail inbox at
+`http://localhost:8026`. Local API processes send to `localhost:1026`; Docker
+app/worker processes use `mailpit:1025`. Authentication email is committed to an
+encrypted outbox, then delivered by Celery beat/worker every 15 seconds. Failed
+SMTP deliveries retry with exponential delays, up to five attempts. After delivery,
+expiry, or exhausting retries, the queued payload is erased. Users may request a
+fresh verification/reset link; owners may reissue an invitation.
+
+Signup sends a verification link. After verification, sign in, enroll an
+authenticator, and save the ten recovery codes. Invite teammates from
+**Organization**. Invited new users create a password and join that organization
+without creating another workspace. Existing verified users without a membership
+sign in before accepting. Invitations cannot move an account between organizations.
+Removed members are signed out immediately; their account remains available for
+a future invitation. Already committed analysis jobs continue for the organization.
+
+MFA recovery requires an unused recovery code plus the account password. Password
+reset does not remove MFA. **Losing the authenticator and every recovery code means
+losing access. There is no emergency, email-only, or operator MFA reset.** Owners
+cannot disable MFA or remove themselves. Organization switching, ownership transfer,
+SSO, API bearer tokens, email changes, and account deletion are not implemented.
+
+### Session API
+
+Start browser or cookie-jar requests with `GET /api/v1/auth/session`. It issues an
+HttpOnly session cookie and returns `state`, `csrf_token`, user, organization, and
+MFA status. Send its CSRF token in `X-CSRF-Token` and the configured `PUBLIC_ORIGIN`
+in `Origin` on every POST/DELETE, including login and multipart uploads. Session
+rotation returns a new CSRF token; keep the cookie jar and returned token current.
+No credentials or authentication tokens belong in local storage.
+
+| Method | Path under `/api/v1` | Purpose |
+|--------|----------------------|---------|
+| GET | `/auth/session` | Bootstrap/inspect session and obtain CSRF token |
+| POST | `/auth/register` | Email, password, organization name |
+| POST | `/auth/verify-email`, `/auth/resend-verification` | Complete/request verification |
+| POST | `/auth/login` | Start password sign-in; may require MFA/enrollment |
+| POST | `/auth/logout`, `/auth/logout-all` | Revoke current/all sessions |
+| POST | `/auth/forgot-password`, `/auth/reset-password` | Email recovery and token-based password change |
+| POST | `/auth/change-password` | Current and new password; revoke other sessions |
+| POST | `/auth/mfa/enroll`, `/auth/mfa/confirm` | Initial enrollment or replacement; show recovery codes once |
+| POST | `/auth/mfa/challenge` | Complete sign-in with TOTP/recovery code |
+| POST | `/auth/mfa/recovery-codes`, `/auth/mfa/disable` | Password + current second factor required |
+| POST | `/auth/accept-invitation` | Consume invitation and join the organization |
+| GET | `/organization`, `/organization/members` | Current workspace and members |
+| GET/POST | `/organization/invitations` | Owner invitation management |
+| DELETE | `/organization/invitations/{id}`, `/organization/members/{id}` | Owner revocation/removal |
+
+Error responses keep the problem-response shape. Authentication error `title`
+values are stable codes such as `session_expired`, `csrf_failed`, `invalid_factor`,
+`owner_required`, and `rate_limited`. Rate limits return `Retry-After`.
+Registration, verification resends, and password-recovery requests use the same
+accepted message for existing and unknown accounts. No token is consumed by GET;
+email links use URL fragments and confirmation pages strip the fragment immediately.
+
+Session defaults are 30 minutes idle and 12 hours absolute; incomplete sessions
+last 10 minutes. Verification links last 24 hours, reset links 30 minutes, and
+invitations 72 hours. Passwords allow 15–128 characters, spaces, and Unicode.
+Redis holds shared authentication counters. Authentication fails closed if Redis
+is unavailable. Login/MFA allow five failures per account and thirty per IP in
+five minutes; email-triggering operations allow three per email and twenty per IP
+per hour. Anonymous session bootstrap is limited to sixty requests per IP/minute.
+Existing general upload/request limits remain in force.
+
+### Production configuration and migration
+
+Set `ENVIRONMENT=production`, `PUBLIC_ORIGIN=https://your-host`, and
+`AUTH_ALLOW_INSECURE_COOKIES=false`. Terminate HTTPS at your proxy and route `/api`
+to FastAPI under the same origin. Preserve `Origin` headers. Configure the server
+client IP through a trusted proxy only; do not trust arbitrary forwarded headers
+for throttling. Serve `frontend/dist` with SPA fallback and do not expose the
+upload directory. Sensitive API/file responses use `Cache-Control: no-store`.
+Interactive API docs and the public OpenAPI schema are disabled in production.
+
+Configure a real SMTP service using `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`,
+`SMTP_PASSWORD`, `SMTP_FROM`, and `SMTP_STARTTLS=true` (STARTTLS submission).
+Mailpit is only a development mail sink; replace the Compose SMTP host/port
+overrides when deploying production workers. Require strong encryption keys,
+PostgreSQL, Redis, one beat scheduler, and Celery workers. Configuration knobs and
+defaults are listed in `.env.example`.
+
+Back up the database and uploads before migrating. Stop API writes, workers, and
+beat, run `uv run alembic upgrade head`, then deploy the API, UI, and workers
+together. The migration preserves existing IDs, files, and analyses and assigns
+all previous hiring records to a locked **Legacy organization**. Newly registered
+accounts cannot claim it. Assign its owner once through an email-bound invitation:
+
+```bash
+uv run python -m app.commands.invite_legacy_owner --email owner@example.com
+```
+
+Use a new account or an existing verified account without a membership. The email
+invitation verifies the new owner's inbox; owner access remains locked until MFA
+is completed. The command refuses already assigned organizations and cannot reset
+an existing owner's access. Failed/expired unaccepted invitations can be reissued.
+
+Monitor HTTP authentication errors/429s, Redis availability, and worker email
+failures. Email logs contain outbox IDs, attempt counts, and exception types,
+never link payloads. Hourly cleanup removes expired sessions, action tokens, and
+outbox rows. Back up uploads and the encryption keys with the database.
+
+### Authentication checks
+
+```bash
+uv run pytest tests/unit
+# TEST_DATABASE_URL must name a dedicated PostgreSQL database ending in _test:
+TEST_DATABASE_URL=postgresql+asyncpg://.../talentmatch_auth_test uv run pytest tests/integration
+uv run ruff check app tests
+uv run mypy app
+cd frontend
+npm test
+npm run lint
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+The new authentication, isolation, outbox, and migration integration tests use
+real PostgreSQL. The throttle integration test uses `REDIS_URL` with randomly
+namespaced test keys and cleans up those keys. Browser tests intercept all API
+requests and never contact the running application or send email.
