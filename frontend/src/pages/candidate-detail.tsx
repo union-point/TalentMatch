@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Loader2, Brain, ShieldAlert, ShieldCheck, FileText, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,10 @@ import type { DeepAnalysisResultSchema } from '@/types';
 
 export function CandidateDetail() {
   const { resumeId, jdId } = useParams<{ resumeId: string; jdId: string }>();
+  return <CandidateDetailContent key={`${resumeId}:${jdId}`} resumeId={resumeId} jdId={jdId} />;
+}
+
+function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: string }) {
   const navigate = useNavigate();
 
   const { data: detail, isLoading } = useCandidateDetail({
@@ -23,27 +27,11 @@ export function CandidateDetail() {
 
   const deepAnalysisMutation = useDeepAnalysisMutation();
 
-  const [pollId, setPollId] = useState<string | null>(null);
-  const [pollInitialStatus, setPollInitialStatus] = useState('pending');
-
-  const pollQuery = useDeepAnalysisPolling(pollId, pollInitialStatus);
-
-  useEffect(() => {
-    if (deepAnalysisMutation.data) {
-      setPollId(deepAnalysisMutation.data.analysis_id);
-      setPollInitialStatus(deepAnalysisMutation.data.status);
-    }
-  }, [deepAnalysisMutation.data]);
-
-  const existingAnalysisId = detail?.deep_analysis?.analysis_id ?? null;
-  const existingAnalysisStatus = detail?.deep_analysis?.status ?? '';
-
-  const hasAnalysisInProgress =
-    pollQuery.data?.status === 'pending' ||
-    pollQuery.data?.status === 'in_progress' ||
-    (existingAnalysisId &&
-      !pollId &&
-      (existingAnalysisStatus === 'in_progress' || existingAnalysisStatus === 'pending'));
+  const analysis = deepAnalysisMutation.data ?? detail?.deep_analysis;
+  const pollId = analysis?.analysis_id ?? null;
+  const pollQuery = useDeepAnalysisPolling(pollId, analysis?.status ?? 'pending');
+  const currentStatus = pollQuery.data?.status ?? analysis?.status;
+  const hasAnalysisInProgress = currentStatus === 'pending' || currentStatus === 'in_progress';
 
   const handleDeepAnalysis = useCallback(() => {
     if (!resumeId || !jdId) return;
