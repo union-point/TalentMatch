@@ -36,6 +36,14 @@ export function sessionDestination(
     session.state === 'mfa_challenge_required'
   )
     return `/mfa?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`;
-  if (!session.organization || session.organization.locked) return '/account';
+  if (!session.organization || session.organization.locked) {
+    const destination = safeReturnTo(returnTo);
+    if (
+      !session.organization &&
+      destination.split(/[?#]/)[0] === '/accept-invitation'
+    )
+      return destination;
+    return '/account';
+  }
   return safeReturnTo(returnTo);
 }

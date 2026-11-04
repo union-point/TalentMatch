@@ -27,16 +27,26 @@ export function resetSessionToken(): void {
   tokenGeneration += 1;
   csrfToken = undefined;
   csrfRequest = undefined;
+  sessionRequest = undefined;
 }
 
 async function ensureCsrf(): Promise<void> {
   if (csrfToken) return;
-  csrfRequest ??= fetchGet('/v1/auth/session')
-    .then(() => undefined)
-    .finally(() => {
-      csrfRequest = undefined;
-    });
+  if (!csrfRequest) {
+    const pending = fetchGet('/v1/auth/session')
+      .then(() => undefined)
+      .finally(() => {
+        if (csrfRequest === pending) csrfRequest = undefined;
+      });
+    csrfRequest = pending;
+  }
   await csrfRequest;
+  if (!csrfToken)
+    throw new ApiError(
+      'Your session changed. Please try again.',
+      409,
+      'session_changed'
+    );
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -96,9 +106,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 export function fetchGet<T>(path: string): Promise<T> {
   if (path === '/v1/auth/session') {
-    sessionRequest ??= request<T>(path).finally(() => {
-      sessionRequest = undefined;
-    });
+    if (!sessionRequest) {
+      const pending = request<T>(path).finally(() => {
+        if (sessionRequest === pending) sessionRequest = undefined;
+      });
+      sessionRequest = pending;
+    }
     return sessionRequest as Promise<T>;
   }
   return request<T>(path);

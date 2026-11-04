@@ -175,7 +175,10 @@ test('concurrent session reads share one bootstrap request', async () => {
     bootstraps += 1;
     return Response.json(anonymous);
   });
-  await Promise.all([fetchGet('/v1/auth/session'), fetchGet('/v1/auth/session')]);
+  await Promise.all([
+    fetchGet('/v1/auth/session'),
+    fetchGet('/v1/auth/session'),
+  ]);
   assert.equal(bootstraps, 1);
 });
 
@@ -185,8 +188,12 @@ test('a stale session response cannot replace a rotated CSRF token', async () =>
   mock.method(globalThis, 'fetch', async (url, options) => {
     calls += 1;
     if (calls === 1) return Response.json(anonymous);
-    if (calls === 2) return new Promise(resolve => { finishRead = () => resolve(Response.json(anonymous)); });
-    if (calls === 3) return Response.json({ ...anonymous, csrf_token: 'new-token' });
+    if (calls === 2)
+      return new Promise((resolve) => {
+        finishRead = () => resolve(Response.json(anonymous));
+      });
+    if (calls === 3)
+      return Response.json({ ...anonymous, csrf_token: 'new-token' });
     assert.equal(options.headers.get('X-CSRF-Token'), 'new-token');
     return Response.json({ ok: true });
   });
@@ -196,4 +203,28 @@ test('a stale session response cannot replace a rotated CSRF token', async () =>
   finishRead();
   await pending;
   await fetchPost('/v1/action', {});
+});
+
+test('logout abandons an old bootstrap and preserves the new session token', async () => {
+  let completeOld;
+  let reads = 0;
+  mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url.endsWith('/session')) {
+      reads += 1;
+      if (reads === 1)
+        return new Promise((resolve) => {
+          completeOld = () => resolve(Response.json(anonymous));
+        });
+      return Response.json({ ...anonymous, csrf_token: 'fresh-session' });
+    }
+    assert.equal(options.headers.get('X-CSRF-Token'), 'fresh-session');
+    return Response.json({ ok: true });
+  });
+  const old = fetchGet('/v1/auth/session');
+  resetSessionToken();
+  await fetchPost('/v1/first', {});
+  completeOld();
+  await old;
+  await fetchPost('/v1/second', {});
+  assert.equal(reads, 2);
 });

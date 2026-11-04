@@ -65,3 +65,13 @@ test('organization-less and locked memberships lead to account settings', () => 
   );
   assert.equal(sessionDestination(session, '/jobs'), '/jobs');
 });
+
+test('a signed-in user without membership can return to an invitation', () => {
+  assert.equal(
+    sessionDestination(
+      { ...session, organization: null },
+      '/accept-invitation'
+    ),
+    '/accept-invitation'
+  );
+});

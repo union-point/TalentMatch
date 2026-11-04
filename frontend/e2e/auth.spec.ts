@@ -33,7 +33,7 @@ async function mockApi(page: Page, initial = 'anonymous') {
         ? null
         : { ...owner, email: state.email, id: state.email },
     organization:
-      state.phase === 'anonymous'
+      state.phase === 'anonymous' || state.email.includes('unassigned')
         ? null
         : { ...organization, role: state.role },
     mfa_enabled: state.mfa,
@@ -259,6 +259,25 @@ test('MFA challenges gate requests and an external return URL is rejected', asyn
   expect(state.jobReads).toBe(0);
   await page.getByRole('button', { name: 'Verify', exact: true }).click();
   await expect(page).toHaveURL('http://127.0.0.1:4174/');
+  await expect(
+    page.getByRole('heading', { name: 'Dashboard', exact: true })
+  ).toBeVisible();
+});
+
+test('an existing user without an organization returns to their invitation after login', async ({
+  page,
+}) => {
+  await mockApi(page);
+  await page.goto('/accept-invitation#token=private-invitation-token');
+  await page
+    .getByRole('link', { name: 'Sign in to the invited account' })
+    .click();
+  expect(page.url()).not.toContain('token');
+  await login(page, 'member-unassigned@example.com');
+  await expect(
+    page.getByRole('heading', { name: 'Join your team' })
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Accept invitation' }).click();
   await expect(
     page.getByRole('heading', { name: 'Dashboard', exact: true })
   ).toBeVisible();
