@@ -5,6 +5,14 @@ from app.infrastructure.persistence.models.job_description import JobDescription
 from app.infrastructure.persistence.models.resume import ResumeModel
 
 __all__ = [
+    "UserModel",
+    "OrganizationModel",
+    "MembershipModel",
+    "AuthSessionModel",
+    "ActionTokenModel",
+    "MfaCredentialModel",
+    "RecoveryCodeModel",
+    "OutboxEmailModel",
     "Base",
     "UUIDMixin",
     "JobDescriptionModel",
@@ -12,3 +20,14 @@ __all__ = [
     "FastTrackResultModel",
     "DeepAnalysisModel",
 ]
+
+from app.infrastructure.persistence.models.identity import (
+    ActionTokenModel,
+    AuthSessionModel,
+    MembershipModel,
+    MfaCredentialModel,
+    OrganizationModel,
+    OutboxEmailModel,
+    RecoveryCodeModel,
+    UserModel,
+)
