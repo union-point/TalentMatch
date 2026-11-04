@@ -72,6 +72,7 @@ class MfaCredential:
     user_id: UUID
     encrypted_secret: str | None = None
     pending_secret: str | None = None
+    pending_session_id: UUID | None = None
     pending_expires_at: datetime | None = None
     last_used_step: int = -1
 

@@ -92,3 +92,7 @@ def public_error_message(exc: Exception) -> str:
     if isinstance(exc, AIResponseError):
         return ANALYSIS_FAILURE_MESSAGE
     return "An unexpected error occurred. Please try again."
+
+
+class IdentityConflictError(AppError):
+    """An identity uniqueness constraint lost a concurrent race."""

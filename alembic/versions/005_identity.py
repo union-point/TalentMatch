@@ -79,6 +79,7 @@ def upgrade() -> None:
         sa.Column("user_id", sa.UUID(), sa.ForeignKey("users.id"), primary_key=True),
         sa.Column("encrypted_secret", sa.Text()),
         sa.Column("pending_secret", sa.Text()),
+        sa.Column("pending_session_id", sa.UUID()),
         sa.Column("pending_expires_at", sa.DateTime(timezone=True)),
         sa.Column("last_used_step", sa.Integer(), nullable=False),
     )

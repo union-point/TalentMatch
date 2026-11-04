@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.persistence.models.base import Base, UUIDMixin
@@ -25,6 +25,7 @@ class OrganizationModel(Base, UUIDMixin):
 
 class MembershipModel(Base):
     __tablename__ = "memberships"
+    __table_args__ = (CheckConstraint("role IN ('owner', 'member')", name="ck_membership_role"),)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     organization_id: Mapped[UUID] = mapped_column(ForeignKey("organizations.id"), index=True)
     role: Mapped[str] = mapped_column(String(10))
@@ -56,6 +57,7 @@ class MfaCredentialModel(Base):
     __tablename__ = "mfa_credentials"
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"), primary_key=True)
     encrypted_secret: Mapped[str | None] = mapped_column(Text)
+    pending_session_id: Mapped[UUID | None] = mapped_column()
     pending_secret: Mapped[str | None] = mapped_column(Text)
     pending_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_used_step: Mapped[int] = mapped_column(Integer, default=-1)

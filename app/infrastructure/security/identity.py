@@ -22,7 +22,7 @@ class ArgonPasswordHasher:
     async def verify(self, password: str, password_hash: str) -> bool:
         return await asyncio.to_thread(self._hasher.verify, password, password_hash)
 
-    async def dummy_verify(self, password: str) -> None:
+    async def verify_missing(self, password: str) -> None:
         await self.verify(password, self._dummy_hash)
 
 

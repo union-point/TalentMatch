@@ -5,8 +5,10 @@ from typing import TypeVar, cast
 from uuid import UUID
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.core.exceptions import IdentityConflictError
 from app.domain.entities.identity import (
     ActionToken,
     AuthSession,
@@ -219,5 +221,8 @@ class SQLAlchemyIdentityTransaction:
 
     @asynccontextmanager
     async def __call__(self) -> AsyncIterator[IdentityRepository]:
-        async with self._factory() as session, session.begin():
-            yield SQLAlchemyIdentityRepository(session)
+        try:
+            async with self._factory() as session, session.begin():
+                yield SQLAlchemyIdentityRepository(session)
+        except IntegrityError as exc:
+            raise IdentityConflictError("An identity record already exists") from exc
