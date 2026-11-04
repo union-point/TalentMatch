@@ -19,6 +19,7 @@ async function mockCandidates(page: Page) {
     } });
     if (path.endsWith('/job-descriptions')) return route.fulfill({ json: { items: [job], total: 1 } });
     if (path.endsWith('/job-descriptions/job-1')) return route.fulfill({ json: job });
+    if (path.endsWith('/unscored-resumes')) return route.fulfill({ json: { items: [], total: 0, page: 1, page_size: 20, pages: 0 } });
     if (path.endsWith('/candidates')) {
       const params = url.searchParams;
       requests.push(params);
@@ -67,5 +68,45 @@ for (const path of ['/', '/jobs/job-1']) {
     await page.getByRole('button', { name: 'Name', exact: true }).click();
     await expect.poll(() => requests.at(-1)?.get('sort_direction')).toBe('asc');
     await expect(page.getByRole('row').nth(1)).toContainText('Candidate 000');
+  });
+}
+
+
+for (const path of ['/?jd=job-1', '/jobs/job-1']) {
+  test(`recover uploads after refresh and retry scoring on ${path}`, async ({ page }) => {
+    await mockCandidates(page);
+    let uploaded = false;
+    let scored = false;
+    let attempts = 0;
+    const resume = { id: 'recovered-id', filename: 'recover.pdf', candidate_name: null,
+      email: null, injection_scan_passed: true, created_at: null };
+    await page.route('**/api/v1/dashboard/jobs/job-1/unscored-resumes?**', (route) =>
+      route.fulfill({ json: { items: uploaded && !scored ? [resume] : [],
+        total: uploaded && !scored ? 1 : 0, page: 1, page_size: 20, pages: uploaded && !scored ? 1 : 0 } }));
+    await page.route('**/api/v1/resumes/batch-upload', (route) => {
+      uploaded = true;
+      return route.fulfill({ json: { resumes: [{ ...resume, file_type: 'pdf',
+        injection_scan: { passed: true, suspicion_score: 0 } }], total: 1, succeeded: 1, failed: 0 } });
+    });
+    await page.route('**/api/v1/analysis/fast-track', (route) => {
+      expect(route.request().postDataJSON()).toEqual({ job_description_id: 'job-1', resume_ids: ['recovered-id'] });
+      attempts += 1;
+      scored = attempts > 1;
+      return route.fulfill({ json: { job_description_id: 'job-1', total: 1,
+        succeeded: scored ? 1 : 0, failed: scored ? 0 : 1,
+        results: [{ resume_id: 'recovered-id', error: scored ? null : 'Analysis failed. Please try again.' }] } });
+    });
+    await page.goto(path);
+    await page.locator('input[type=file]').last().setInputFiles({ name: 'recover.pdf', mimeType: 'application/pdf', buffer: Buffer.from('resume') });
+    await expect(page.getByRole('checkbox', { name: 'recover.pdf', exact: true })).toBeVisible();
+    await page.reload();
+    await page.getByRole('checkbox', { name: 'recover.pdf', exact: true }).check();
+    await page.getByRole('button', { name: 'Analyze selected (1)', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Analysis failed');
+    await expect(page.getByRole('checkbox', { name: 'recover.pdf', exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Analyze selected (1)', exact: true }).click();
+    await expect(page.getByText('No unscored resumes for this job.')).toBeVisible();
+    await expect(page.getByRole('checkbox', { name: 'recover.pdf', exact: true })).toHaveCount(0);
+    expect(attempts).toBe(2);
   });
 }

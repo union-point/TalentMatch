@@ -16,7 +16,7 @@ interface JdSelectorProps {
 export function JdSelector({ entries, value, onChange }: JdSelectorProps) {
   return (
     <Select
-      value={value ?? undefined}
+      value={value}
       onValueChange={(v) => onChange(v ?? '')}
     >
       <SelectTrigger className="w-full">

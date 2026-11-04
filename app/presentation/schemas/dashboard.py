@@ -51,3 +51,20 @@ class CandidateDetailSchema(BaseModel):
     injection_scan_passed: bool
     fast_track: FastTrackSummarySchema | None = None
     deep_analysis: DeepAnalysisSummarySchema | None = None
+
+
+class ResumeSummarySchema(BaseModel):
+    id: uuid.UUID
+    filename: str
+    candidate_name: str | None
+    email: str | None
+    injection_scan_passed: bool
+    created_at: str | None
+
+
+class UnscoredResumesResponse(BaseModel):
+    items: list[ResumeSummarySchema]
+    total: int
+    page: int
+    page_size: int
+    pages: int

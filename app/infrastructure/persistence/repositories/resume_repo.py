@@ -1,10 +1,12 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.resume import Resume
+from app.domain.entities.resume_summary import ResumeSummary
 from app.domain.ports.repository import ResumeRepository
+from app.infrastructure.persistence.models.fast_track_result import FastTrackResultModel
 from app.infrastructure.persistence.models.resume import ResumeModel
 
 
@@ -12,6 +14,54 @@ class SQLAlchemyResumeRepository(ResumeRepository):
     def __init__(self, session: AsyncSession, organization_id: uuid.UUID) -> None:
         self._session = session
         self._organization_id = organization_id
+
+    async def get_unscored_for_job(
+        self, jd_id: uuid.UUID, page: int = 1, page_size: int = 20, search: str | None = None
+    ) -> tuple[list[ResumeSummary], int]:
+        scored = (
+            select(FastTrackResultModel.id)
+            .where(
+                FastTrackResultModel.organization_id == self._organization_id,
+                FastTrackResultModel.job_description_id == jd_id,
+                FastTrackResultModel.resume_id == ResumeModel.id,
+            )
+            .exists()
+        )
+        query = select(
+            ResumeModel.id,
+            ResumeModel.filename,
+            ResumeModel.candidate_name,
+            ResumeModel.email,
+            ResumeModel.injection_scan_passed,
+            ResumeModel.created_at,
+        ).where(ResumeModel.organization_id == self._organization_id, ~scored)
+        if search:
+            query = query.where(
+                or_(
+                    func.lower(ResumeModel.filename).contains(search.lower(), autoescape=True),
+                    func.lower(ResumeModel.candidate_name).contains(
+                        search.lower(), autoescape=True
+                    ),
+                    func.lower(ResumeModel.email).contains(search.lower(), autoescape=True),
+                )
+            )
+        total = await self._session.scalar(select(func.count()).select_from(query.subquery()))
+        rows = await self._session.execute(
+            query.order_by(ResumeModel.created_at.desc(), ResumeModel.id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        return [
+            ResumeSummary(
+                id=row.id,
+                filename=row.filename,
+                candidate_name=row.candidate_name,
+                email=row.email,
+                injection_scan_passed=row.injection_scan_passed,
+                created_at=row.created_at.isoformat() if row.created_at else None,
+            )
+            for row in rows
+        ], total or 0
 
     async def save(self, resume: Resume) -> Resume:
         if resume.organization_id != self._organization_id:

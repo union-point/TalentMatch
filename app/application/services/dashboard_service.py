@@ -6,6 +6,7 @@ from app.application.dto.dashboard import (
     CandidateDetailResult,
     PaginatedResult,
     ResumeFileResult,
+    UnscoredResumesResult,
 )
 from app.core.exceptions import (
     JobDescriptionNotFoundError,
@@ -79,6 +80,16 @@ class DashboardService:
             page_size=page_size,
             pages=math.ceil(total / page_size),
         )
+
+    async def get_unscored_resumes(
+        self, jd_id: uuid.UUID, page: int = 1, page_size: int = 20, search: str | None = None
+    ) -> UnscoredResumesResult:
+        if await self._jd_repository.get_by_id(jd_id) is None:
+            raise JobDescriptionNotFoundError(jd_id)
+        items, total = await self._resume_repository.get_unscored_for_job(
+            jd_id, page, page_size, search
+        )
+        return UnscoredResumesResult(items, total, page, page_size, math.ceil(total / page_size))
 
     async def get_candidate_detail(
         self,

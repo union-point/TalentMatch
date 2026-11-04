@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play, Loader2 } from 'lucide-react';
+import { ArrowLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,7 +9,7 @@ import { UploadResults } from '@/components/upload-results';
 import { CandidateTable } from '@/components/candidate-table';
 import { useJobDescription } from '@/hooks/use-job-description';
 import { useBatchUpload } from '@/hooks/use-batch-upload';
-import { useFastTrack } from '@/hooks/use-fast-track';
+import { UnscoredResumes } from '@/components/unscored-resumes';
 import type { BatchUploadResponse } from '@/types';
 
 export function CandidateList() {
@@ -19,8 +19,6 @@ export function CandidateList() {
 
   const { data: jd, isLoading: jdLoading } = useJobDescription(jdId ?? null);
   const batchUpload = useBatchUpload();
-  const fastTrack = useFastTrack();
-
 
   const handleBatchUpload = useCallback(
     async (files: File[]) => {
@@ -28,18 +26,11 @@ export function CandidateList() {
         const result = await batchUpload.mutateAsync(files);
         setUploadResult(result);
       } catch {
-        // Error handling via toast in M4
+        // The mutation error is rendered below.
       }
     },
     [batchUpload]
   );
-
-  const handleRunAnalysis = useCallback(() => {
-    if (!jdId || !uploadResult || uploadResult.resumes.length === 0) return;
-    const resumeIds = uploadResult.resumes.map((r) => r.id);
-    fastTrack.mutate({ job_description_id: jdId, resume_ids: resumeIds });
-  }, [jdId, uploadResult, fastTrack]);
-
 
   if (jdLoading) {
     return (
@@ -66,6 +57,7 @@ export function CandidateList() {
         </div>
       </div>
 
+      {batchUpload.error && <p role="alert" className="text-sm text-destructive">{batchUpload.error.message}</p>}
       <Card>
         <CardHeader>
           <CardTitle>Upload Resumes</CardTitle>
@@ -79,22 +71,7 @@ export function CandidateList() {
         </CardContent>
       </Card>
 
-      {uploadResult && uploadResult.total > 0 && (
-        <div className="flex items-center justify-center">
-          <Button
-            size="lg"
-            onClick={handleRunAnalysis}
-            disabled={fastTrack.isPending}
-          >
-            {fastTrack.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            {fastTrack.isPending ? 'Analyzing...' : 'Run Analysis'}
-          </Button>
-        </div>
-      )}
+      {jdId && <UnscoredResumes key={jdId} jdId={jdId} />}
 
       <Card>
         <CardHeader>

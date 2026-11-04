@@ -1,4 +1,5 @@
 import uuid
+from dataclasses import asdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import FileResponse
@@ -17,6 +18,7 @@ from app.presentation.schemas.dashboard import (
     FastTrackSummarySchema,
     PaginatedResponse,
     RankedCandidateSchema,
+    UnscoredResumesResponse,
 )
 
 router = APIRouter(prefix="/api/v1/dashboard", tags=["dashboard"])
@@ -160,3 +162,18 @@ async def get_resume_file(
         filename=file_result.filename,
         media_type=file_result.mime_type,
     )
+
+
+@router.get("/jobs/{jd_id}/unscored-resumes", response_model=UnscoredResumesResponse)
+async def get_unscored_resumes(
+    jd_id: uuid.UUID,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    q: str | None = Query(None, description="Search by filename, candidate name or email"),
+    service: DashboardService = Depends(get_dashboard_service),
+) -> UnscoredResumesResponse:
+    try:
+        result = await service.get_unscored_resumes(jd_id, page, page_size, q)
+    except JobDescriptionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return UnscoredResumesResponse.model_validate(asdict(result))

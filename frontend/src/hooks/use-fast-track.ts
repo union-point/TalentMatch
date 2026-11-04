@@ -14,6 +14,7 @@ export function useFastTrack() {
       fetchPost<FastTrackResponse>('/v1/analysis/fast-track', data),
     onSuccess: async (_result, variables) => {
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['unscored-resumes', variables.job_description_id] }),
         queryClient.invalidateQueries({ queryKey: ['candidates', variables.job_description_id] }),
         ...variables.resume_ids.map((resumeId) =>
           queryClient.invalidateQueries({

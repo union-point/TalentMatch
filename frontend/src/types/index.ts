@@ -149,3 +149,21 @@ export interface CandidateDetailSchema {
   fast_track?: FastTrackSummarySchema | null;
   deep_analysis?: DeepAnalysisSummarySchema | null;
 }
+
+
+export interface UnscoredResume {
+  id: string;
+  filename: string;
+  candidate_name: string | null;
+  email: string | null;
+  injection_scan_passed: boolean;
+  created_at: string | null;
+}
+
+export interface UnscoredResumesResponse {
+  items: UnscoredResume[];
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+}

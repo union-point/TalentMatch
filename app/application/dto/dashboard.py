@@ -5,6 +5,7 @@ from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.entities.ranked_candidate import RankedCandidateItem as RankedCandidateItem
 from app.domain.entities.resume import Resume
+from app.domain.entities.resume_summary import ResumeSummary
 
 
 @dataclass
@@ -28,3 +29,12 @@ class ResumeFileResult:
     file_path: Path
     filename: str
     mime_type: str
+
+
+@dataclass
+class UnscoredResumesResult:
+    items: list[ResumeSummary]
+    total: int
+    page: int
+    page_size: int
+    pages: int

@@ -6,6 +6,7 @@ from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.ranked_candidate import RankedCandidateItem
 from app.domain.entities.resume import Resume
+from app.domain.entities.resume_summary import ResumeSummary
 from app.domain.value_objects import CandidateFilter, CandidateSort, SortDirection
 
 
@@ -21,6 +22,11 @@ class JobDescriptionRepository(ABC):
 
 
 class ResumeRepository(ABC):
+    @abstractmethod
+    async def get_unscored_for_job(
+        self, jd_id: uuid.UUID, page: int = 1, page_size: int = 20, search: str | None = None
+    ) -> tuple[list[ResumeSummary], int]: ...
+
     @abstractmethod
     async def save(self, resume: Resume) -> Resume: ...
 

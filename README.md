@@ -148,11 +148,17 @@ Candidate lists paginate and filter on the server. `q` searches names and emails
 `candidate_name`, or `pass_fail`, with `sort_direction=asc|desc`. The legacy
 `pass_fail_only=true` parameter still applies when `status=all`.
 
+Unscored uploads are available at `GET /dashboard/jobs/{jd_id}/unscored-resumes`
+(`page`, `page_size`, `q`). Both screens show organization-owned resumes without a
+score for the selected job, including older uploads and failed scoring attempts.
+Select resumes there to analyze them; successful results move to the candidate
+list. The dashboard keeps its selected job in the URL so refresh preserves context.
+
 ## Typical workflow
 
 1. Upload JD → receive `jd_id`
 2. Upload one or more resumes → receive `resume_id`s
-3. `POST /analysis/fast-track` with JD + resume IDs → scores
+3. Select unscored resumes in the UI, or `POST /analysis/fast-track` with JD + resume IDs → scores
 4. Optionally `POST /analysis/deep` for shortlisted candidates; poll until `completed`
 5. Rank/filter via dashboard endpoints or the React UI
 

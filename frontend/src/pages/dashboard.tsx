@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Plus, Play, Loader2 } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { JdUploadDialog } from '@/components/jd-upload-dialog';
@@ -10,21 +11,23 @@ import { UploadResults } from '@/components/upload-results';
 import { CandidateTable } from '@/components/candidate-table';
 import { useUploadJd } from '@/hooks/use-upload-jd';
 import { useBatchUpload } from '@/hooks/use-batch-upload';
-import { useFastTrack } from '@/hooks/use-fast-track';
+import { UnscoredResumes } from '@/components/unscored-resumes';
 import { useJobDescriptions } from '@/hooks/use-job-descriptions';
 import type { BatchUploadResponse } from '@/types';
 
 export function Dashboard() {
   const queryClient = useQueryClient();
-  const [selectedJdId, setSelectedJdId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedJdId = searchParams.get('jd');
+  const setSelectedJdId = useCallback((id: string) => {
+    setSearchParams((params) => { params.set('jd', id); return params; });
+  }, [setSearchParams]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [uploadResult, setUploadResult] = useState<BatchUploadResponse | null>(null);
 
   const { data: jdData } = useJobDescriptions();
   const uploadJd = useUploadJd();
   const batchUpload = useBatchUpload();
-  const fastTrack = useFastTrack();
-
 
   const handleJdUpload = useCallback(
     async (data: { file: File; title: string; company: string }) => {
@@ -37,7 +40,7 @@ export function Dashboard() {
         // The mutation error is rendered below.
       }
     },
-    [uploadJd, queryClient]
+    [uploadJd, queryClient, setSelectedJdId]
   );
 
   const handleBatchUpload = useCallback(
@@ -51,13 +54,6 @@ export function Dashboard() {
     },
     [batchUpload]
   );
-
-  const handleRunAnalysis = useCallback(() => {
-    if (!selectedJdId || !uploadResult || uploadResult.resumes.length === 0) return;
-    const resumeIds = uploadResult.resumes.map((r) => r.id);
-    fastTrack.mutate({ job_description_id: selectedJdId, resume_ids: resumeIds });
-  }, [selectedJdId, uploadResult, fastTrack]);
-
 
   return (
     <div className="space-y-8">
@@ -74,14 +70,9 @@ export function Dashboard() {
         </Button>
       </div>
 
-      {[uploadJd.error, batchUpload.error, fastTrack.error].filter(Boolean).map((error, index) => (
+      {[uploadJd.error, batchUpload.error].filter(Boolean).map((error, index) => (
         <p key={index} role="alert" className="text-sm text-destructive">
           {error?.message}
-        </p>
-      ))}
-      {fastTrack.data?.results.filter((result) => result.error).map((result) => (
-        <p key={result.resume_id} role="alert" className="text-sm text-destructive">
-          {uploadResult?.resumes.find((resume) => resume.id === result.resume_id)?.filename ?? result.resume_id}: {result.error}
         </p>
       ))}
 
@@ -120,22 +111,7 @@ export function Dashboard() {
         </Card>
       )}
 
-      {uploadResult && uploadResult.total > 0 && (
-        <div className="flex items-center justify-center">
-          <Button
-            size="lg"
-            onClick={handleRunAnalysis}
-            disabled={fastTrack.isPending}
-          >
-            {fastTrack.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            {fastTrack.isPending ? 'Analyzing...' : 'Run Analysis'}
-          </Button>
-        </div>
-      )}
+      {selectedJdId && <UnscoredResumes key={selectedJdId} jdId={selectedJdId} />}
 
       <Card>
         <CardHeader>

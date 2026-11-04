@@ -377,3 +377,27 @@ async def test_rejects_invalid_candidate_order_or_filter(
 ) -> None:
     response = await dash_client.get(f"/api/v1/dashboard/jobs/{uuid.uuid4()}/candidates?{query}")
     assert response.status_code == 422
+
+
+async def test_unscored_endpoint_returns_summary_and_pagination(
+    dash_client: AsyncClient,
+    mock_dashboard_service: AsyncMock,
+) -> None:
+    from app.application.dto.dashboard import UnscoredResumesResult
+    from app.domain.entities.resume_summary import ResumeSummary
+
+    job, resume = uuid.uuid4(), uuid.uuid4()
+    mock_dashboard_service.get_unscored_resumes.return_value = UnscoredResumesResult(
+        [ResumeSummary(resume, "resume.pdf", None, None, True, None)], 21, 2, 20, 2
+    )
+    response = await dash_client.get(
+        f"/api/v1/dashboard/jobs/{job}/unscored-resumes?page=2&q=resume"
+    )
+    assert response.status_code == 200
+    assert response.json()["items"][0]["id"] == str(resume)
+    assert response.json()["total"] == 21
+    mock_dashboard_service.get_unscored_resumes.assert_awaited_once_with(job, 2, 20, "resume")
+    mock_dashboard_service.get_unscored_resumes.side_effect = JobDescriptionNotFoundError(job)
+    assert (
+        await dash_client.get(f"/api/v1/dashboard/jobs/{job}/unscored-resumes")
+    ).status_code == 404
