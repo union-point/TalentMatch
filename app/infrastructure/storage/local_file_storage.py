@@ -26,8 +26,15 @@ class LocalFileStorage(FileStorage):
         filename = f"{file_id}{extension}"
         file_path = target_dir / filename
 
-        file_path.write_bytes(file_content)
+        try:
+            file_path.write_bytes(file_content)
+        except BaseException:
+            file_path.unlink(missing_ok=True)
+            raise
         return file_path
+
+    async def delete(self, file_path: Path) -> None:
+        await run_in_threadpool(file_path.unlink, missing_ok=True)
 
     async def get_path(self, file_id: UUID, subfolder: str) -> Path:
         return await run_in_threadpool(self._get_path_sync, file_id, subfolder)

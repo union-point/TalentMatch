@@ -76,7 +76,7 @@ async def real_client(engine, temp_upload_dir) -> AsyncGenerator[AsyncClient, No
             jd_repo = SQLAlchemyJobDescriptionRepository(session)
             resume_repo = SQLAlchemyResumeRepository(session)
             file_storage = LocalFileStorage(base_dir=temp_upload_dir)
-            yield IngestionService(jd_repo, resume_repo, file_storage)
+            yield IngestionService(jd_repo, resume_repo, file_storage, session.begin)
             await session.commit()
 
     app.dependency_overrides[get_db] = override_get_db

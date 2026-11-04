@@ -30,7 +30,7 @@ async def get_ingestion_service(
     jd_repo = SQLAlchemyJobDescriptionRepository(session)
     resume_repo = SQLAlchemyResumeRepository(session)
     file_storage = get_local_file_storage()
-    yield IngestionService(jd_repo, resume_repo, file_storage)
+    yield IngestionService(jd_repo, resume_repo, file_storage, session.begin)
 
 
 async def get_fast_track_service(

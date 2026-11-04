@@ -141,7 +141,12 @@ async def upload_resume(
     )
 
 
-@router.post("/resumes/batch-upload", response_model=BatchUploadResponse)
+@router.post(
+    "/resumes/batch-upload",
+    response_model=BatchUploadResponse,
+    description="Atomic batch: any file failure rejects the entire batch and removes saved files. "
+    "A successful response always has failed=0; failures return an HTTP error.",
+)
 async def batch_upload_resumes(
     files: list[UploadFile] = File(...),
     service: IngestionService = Depends(get_ingestion_service),

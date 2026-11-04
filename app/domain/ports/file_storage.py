@@ -5,6 +5,11 @@ from uuid import UUID
 
 class FileStorage(ABC):
     @abstractmethod
+    async def delete(self, file_path: Path) -> None:
+        """Remove a stored file; deleting an absent file is a no-op."""
+        ...
+
+    @abstractmethod
     async def save(self, file_content: bytes, original_filename: str, subfolder: str) -> Path:
         """Save file content and return the stored file path."""
         ...
