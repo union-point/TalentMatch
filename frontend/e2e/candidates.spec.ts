@@ -110,3 +110,40 @@ for (const path of ['/?jd=job-1', '/jobs/job-1']) {
     expect(attempts).toBe(2);
   });
 }
+
+for (const path of ['/?jd=job-1', '/jobs/job-1']) {
+  for (const allFailed of [false, true]) {
+    test(`show individual upload failures on ${path} (all failed: ${allFailed})`, async ({ page }) => {
+      await mockCandidates(page);
+      let uploaded = false;
+      const resume = { id: 'good-id', filename: 'good.pdf', candidate_name: null,
+        email: null, injection_scan_passed: true, created_at: null };
+      await page.route('**/api/v1/dashboard/jobs/job-1/unscored-resumes?**', (route) =>
+        route.fulfill({ json: { items: uploaded && !allFailed ? [resume] : [],
+          total: uploaded && !allFailed ? 1 : 0, page: 1, page_size: 20, pages: uploaded && !allFailed ? 1 : 0 } }));
+      await page.route('**/api/v1/resumes/batch-upload', (route) => {
+        uploaded = true;
+        const errors = [{ index: 1, filename: 'bad.pdf', error: 'Could not parse the uploaded document.' }];
+        if (allFailed) errors.unshift({ index: 0, filename: 'good.pdf', error: 'Could not parse the uploaded document.' });
+        return route.fulfill({ json: { resumes: allFailed ? [] : [{ ...resume, file_type: 'pdf',
+          injection_scan: { passed: true, suspicion_score: 0 } }], total: 2,
+          succeeded: allFailed ? 0 : 1, failed: allFailed ? 2 : 1, errors } });
+      });
+      await page.goto(path);
+      await page.locator('input[type=file]').last().setInputFiles([
+        { name: 'good.pdf', mimeType: 'application/pdf', buffer: Buffer.from('good') },
+        { name: 'bad.pdf', mimeType: 'application/pdf', buffer: Buffer.from('bad') },
+      ]);
+      await expect(page.getByText(`${allFailed ? 0 : 1} succeeded`, { exact: true })).toBeVisible();
+      await expect(page.getByText(`${allFailed ? 2 : 1} failed`, { exact: true })).toBeVisible();
+      await expect(page.getByRole('alert').filter({ hasText: 'bad.pdf' })).toContainText('Could not parse');
+      await expect(page.getByRole('checkbox', { name: 'bad.pdf', exact: true })).toHaveCount(0);
+      if (allFailed) {
+        await expect(page.getByRole('button', { name: 'Analyze selected (0)' })).toBeDisabled();
+      } else {
+        await page.getByRole('checkbox', { name: 'good.pdf', exact: true }).check();
+        await expect(page.getByRole('button', { name: 'Analyze selected (1)' })).toBeEnabled();
+      }
+    });
+  }
+}

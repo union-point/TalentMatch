@@ -23,6 +23,7 @@ export interface ResumeUploadResponse {
 }
 
 export interface BatchUploadResponse {
+  errors: { index: number; filename: string; error: string }[];
   resumes: ResumeUploadResponse[];
   total: number;
   succeeded: number;

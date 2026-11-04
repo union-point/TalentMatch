@@ -4,7 +4,8 @@ from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, nullcontext
 from pathlib import Path
 
-from app.application.dto.ingestion import IngestionResponse
+from app.application.dto.ingestion import BatchIngestionResult, IngestionFailure, IngestionResponse
+from app.core.exceptions import public_error_message
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
 from app.domain.ports.file_parser import FileParser
@@ -146,13 +147,18 @@ class IngestionService:
     async def ingest_resumes_batch(
         self,
         files: list[tuple[bytes, str]],
-    ) -> list[IngestionResponse]:
-        """Commit all resumes together, or roll back and delete every saved file."""
-        async with self._atomic_upload() as paths:
-            results: list[IngestionResponse] = []
-            for file_content, filename in files:
-                results.append(await self._ingest_resume(paths, file_content, filename))
-            return results
+    ) -> BatchIngestionResult:
+        """Commit each resume independently and report safe, per-file failures."""
+        result = BatchIngestionResult(resumes=[], errors=[])
+        for index, (file_content, filename) in enumerate(files):
+            try:
+                resume = await self.ingest_resume(file_content, filename)
+            except Exception as exc:
+                logger.exception("Batch upload failed for file at index %s", index)
+                result.errors.append(IngestionFailure(index, filename, public_error_message(exc)))
+            else:
+                result.resumes.append(resume)
+        return result
 
     @staticmethod
     async def _parse_file(parser: FileParser, file_path: Path) -> str:

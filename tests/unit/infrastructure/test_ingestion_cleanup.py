@@ -1,3 +1,4 @@
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -8,7 +9,9 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.application.services.ingestion_service import IngestionService
+from app.core.exceptions import ParsingError
 from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
+from app.domain.entities.resume import Resume
 from app.infrastructure.persistence.models import Base
 from app.infrastructure.persistence.models.resume import ResumeModel
 from app.infrastructure.persistence.repositories.job_description_repo import (
@@ -49,7 +52,10 @@ async def test_upload_failure_removes_file(tmp_path: Path, stage: str, kind: str
     assert not list(tmp_path.rglob("*.txt"))
 
 
-async def test_mixed_batch_rolls_back_rows_and_files(tmp_path: Path) -> None:
+@pytest.mark.parametrize("stage", ["parse", "persist", "commit"])
+async def test_mixed_batch_preserves_successes_and_cleans_failed_file(
+    tmp_path: Path, stage: str
+) -> None:
     engine = create_async_engine("sqlite+aiosqlite://")
     metadata = MetaData()
     for table in Base.metadata.sorted_tables:
@@ -63,22 +69,95 @@ async def test_mixed_batch_rolls_back_rows_and_files(tmp_path: Path) -> None:
         async with engine.begin() as connection:
             await connection.run_sync(metadata.create_all)
         async with AsyncSession(engine) as session:
+            repository = SQLAlchemyResumeRepository(session, organization_id=TEST_ORG_ID)
+            attempt = 0
+
+            @asynccontextmanager
+            async def transaction() -> AsyncIterator[None]:
+                nonlocal attempt
+                attempt += 1
+                async with session.begin():
+                    yield
+                    if attempt == 2 and stage == "commit":
+                        raise RuntimeError("secret commit detail")
+
+            save = repository.save
+
+            async def save_resume(resume: Resume) -> Resume:
+                result = await save(resume)
+                if attempt == 2 and stage == "persist":
+                    raise RuntimeError("secret database detail")
+                return result
+
+            repository.save = save_resume
             service = IngestionService(
                 SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID),
-                SQLAlchemyResumeRepository(session, organization_id=TEST_ORG_ID),
+                repository,
                 LocalFileStorage(tmp_path),
                 TEST_ORG_ID,
-                session.begin,
+                transaction,
             )
             parser = AsyncMock()
-            parser.parse.side_effect = ["Valid resume", RuntimeError("bad file")]
+            parser.parse.side_effect = [
+                "Valid resume",
+                ParsingError("secret parser detail") if stage == "parse" else "Valid resume",
+                "Another valid resume",
+            ]
             with patch(
                 "app.application.services.ingestion_service.get_parser_for_file",
                 return_value=parser,
             ):
-                with pytest.raises(RuntimeError, match="bad file"):
-                    await service.ingest_resumes_batch([(b"ok", "ok.txt"), (b"bad", "bad.txt")])
-            assert await session.scalar(select(func.count()).select_from(ResumeModel)) == 0
-            assert not list(tmp_path.rglob("*.txt"))
+                result = await service.ingest_resumes_batch(
+                    [
+                        (b"ok", "ok.txt"),
+                        (b"bad", "bad.txt"),
+                        (b"later", "later.txt"),
+                    ]
+                )
+            assert [resume.filename for resume in result.resumes] == ["ok.txt", "later.txt"]
+            assert len(result.errors) == 1
+            assert result.errors[0].index == 1 and result.errors[0].filename == "bad.txt"
+            assert "secret" not in result.errors[0].error
+            assert await session.scalar(select(func.count()).select_from(ResumeModel)) == 2
+            assert len(list(tmp_path.rglob("*.txt"))) == 2
+            saved = (await session.scalars(select(ResumeModel))).all()
+            assert {row.filename for row in saved} == {"ok.txt", "later.txt"}
+            assert all(Path(row.file_path).exists() for row in saved)
     finally:
         await engine.dispose()
+
+
+async def test_all_failures_report_each_duplicate_filename(tmp_path: Path) -> None:
+    parser = AsyncMock()
+    parser.parse.side_effect = ParsingError("private document data")
+    service = IngestionService(AsyncMock(), AsyncMock(), LocalFileStorage(tmp_path), TEST_ORG_ID)
+    with patch(
+        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
+    ):
+        result = await service.ingest_resumes_batch([(b"a", "same.txt"), (b"b", "same.txt")])
+    assert result.resumes == []
+    assert [error.index for error in result.errors] == [0, 1]
+    assert all(error.error == "Could not parse the uploaded document." for error in result.errors)
+    assert not list(tmp_path.rglob("*.txt"))
+
+
+async def test_batch_cancellation_stops_processing_and_removes_current_file(tmp_path: Path) -> None:
+    import asyncio
+
+    parser, repository = AsyncMock(), AsyncMock()
+    parser.parse.side_effect = ["Valid", asyncio.CancelledError(), "Never parsed"]
+    repository.save.side_effect = lambda resume: resume
+    service = IngestionService(repository, repository, LocalFileStorage(tmp_path), TEST_ORG_ID)
+    with patch(
+        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
+    ):
+        with pytest.raises(asyncio.CancelledError):
+            await service.ingest_resumes_batch(
+                [
+                    (b"ok", "ok.txt"),
+                    (b"cancel", "cancel.txt"),
+                    (b"later", "later.txt"),
+                ]
+            )
+    assert parser.parse.await_count == 2
+    assert len(list(tmp_path.rglob("*.txt"))) == 1

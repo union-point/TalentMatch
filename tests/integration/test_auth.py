@@ -398,6 +398,7 @@ async def test_every_hiring_endpoint_is_scoped_and_cross_org_analysis_has_no_sid
     for path in [
         f"job-descriptions/{foreign_job}",
         f"dashboard/jobs/{foreign_job}/candidates",
+        f"dashboard/jobs/{foreign_job}/unscored-resumes",
         f"dashboard/candidates/{foreign_resume}/job/{own_job}",
         f"dashboard/candidates/{own_resume}/job/{foreign_job}",
         f"dashboard/candidates/{foreign_resume}/resume-file",
@@ -406,6 +407,8 @@ async def test_every_hiring_endpoint_is_scoped_and_cross_org_analysis_has_no_sid
         response = await client.get("/api/v1/" + path)
         assert response.status_code == 404, (path, response.text)
     assert (await client.get(f"/api/v1/dashboard/jobs/{own_job}/candidates")).json()["total"] == 1
+    unscored = await client.get(f"/api/v1/dashboard/jobs/{own_job}/unscored-resumes")
+    assert unscored.status_code == 200 and unscored.json()["total"] == 0
     assert (
         await client.get(f"/api/v1/dashboard/candidates/{own_resume}/job/{own_job}")
     ).status_code == 200
@@ -479,6 +482,33 @@ async def test_protected_upload_transactions_and_denied_upload_cleanup(
         assert result.status_code == 200, result.text
         parser.parse.assert_awaited_once()
         assert len(list(tmp_path.rglob("*.pdf"))) == 1
+
+        from app.core.exceptions import ParsingError
+        from app.infrastructure.persistence.models import ResumeModel
+
+        parser.parse.side_effect = ["Good resume", ParsingError("internal detail"), "Later resume"]
+        batch = await client.post(
+            "/api/v1/resumes/batch-upload",
+            files=[
+                ("files", ("good.pdf", b"good", "application/pdf")),
+                ("files", ("bad.pdf", b"bad", "application/pdf")),
+                ("files", ("later.pdf", b"later", "application/pdf")),
+            ],
+            headers={"Origin": "http://test", "X-CSRF-Token": csrf},
+        )
+        assert batch.status_code == 200, batch.text
+        assert batch.json()["succeeded"] == 2 and batch.json()["failed"] == 1
+        assert batch.json()["errors"] == [
+            {
+                "index": 1,
+                "filename": "bad.pdf",
+                "error": "Could not parse the uploaded document.",
+            }
+        ]
+        async with factory() as db:
+            filenames = (await db.scalars(select(ResumeModel.filename))).all()
+        assert set(filenames) == {"resume.pdf", "good.pdf", "later.pdf"}
+        assert len(list(tmp_path.rglob("*.pdf"))) == 3
     get_local_file_storage.cache_clear()
 
 

@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
-from app.application.dto.ingestion import IngestionResponse
+from app.application.dto.ingestion import BatchIngestionResult, IngestionResponse
 from app.domain.value_objects import InjectionScanResult
 
 os.environ.setdefault(
@@ -144,7 +144,7 @@ async def client(temp_dir) -> AsyncGenerator[AsyncClient, None]:
                     normalized_length=len(content) - 10,
                 )
             )
-        return results
+        return BatchIngestionResult(resumes=results, errors=[])
 
     mock_service.ingest_job_description = AsyncMock(side_effect=mock_ingest_jd)
     mock_service.ingest_resume = AsyncMock(side_effect=mock_ingest_resume)

@@ -12,3 +12,16 @@ class IngestionResponse:
     original_content_length: int
     normalized_content_length: int
     injection_scan: InjectionScanResult
+
+
+@dataclass
+class IngestionFailure:
+    index: int
+    filename: str
+    error: str
+
+
+@dataclass
+class BatchIngestionResult:
+    resumes: list[IngestionResponse]
+    errors: list[IngestionFailure]

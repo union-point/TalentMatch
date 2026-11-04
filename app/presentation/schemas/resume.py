@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.presentation.schemas.job_description import InjectionScanDetails
 
@@ -12,8 +12,15 @@ class ResumeUploadResponse(BaseModel):
     injection_scan: InjectionScanDetails
 
 
+class ResumeUploadFailure(BaseModel):
+    index: int
+    filename: str
+    error: str
+
+
 class BatchUploadResponse(BaseModel):
     resumes: list[ResumeUploadResponse]
     total: int
     succeeded: int
     failed: int
+    errors: list[ResumeUploadFailure] = Field(default_factory=list)

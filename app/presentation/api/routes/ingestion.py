@@ -21,7 +21,11 @@ from app.presentation.schemas.job_description import (
     JobDescriptionListResponse,
     JobDescriptionUploadResponse,
 )
-from app.presentation.schemas.resume import BatchUploadResponse, ResumeUploadResponse
+from app.presentation.schemas.resume import (
+    BatchUploadResponse,
+    ResumeUploadFailure,
+    ResumeUploadResponse,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["ingestion"])
 
@@ -148,8 +152,9 @@ async def upload_resume(
 @router.post(
     "/resumes/batch-upload",
     response_model=BatchUploadResponse,
-    description="Atomic batch: any file failure rejects the entire batch and removes saved files. "
-    "A successful response always has failed=0; failures return an HTTP error.",
+    description="Each file is committed independently. The response includes saved resumes "
+    "and per-file errors. Request size/count violations reject the entire request "
+    "before ingestion.",
 )
 async def batch_upload_resumes(
     files: list[UploadFile] = File(...),
@@ -175,12 +180,16 @@ async def batch_upload_resumes(
             normalized_content_length=r.normalized_content_length,
             injection_scan=_to_scan_details(r.injection_scan),
         )
-        for r in results
+        for r in results.resumes
     ]
 
     return BatchUploadResponse(
         resumes=responses,
-        total=len(responses),
+        total=len(file_tuples),
         succeeded=len(responses),
-        failed=0,
+        failed=len(results.errors),
+        errors=[
+            ResumeUploadFailure(index=e.index, filename=e.filename, error=e.error)
+            for e in results.errors
+        ],
     )

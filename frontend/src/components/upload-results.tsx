@@ -23,6 +23,11 @@ export function UploadResults({ result }: UploadResultsProps) {
         )}
       </div>
       <div className="max-h-48 space-y-1 overflow-y-auto">
+        {(result.errors ?? []).map((failure) => (
+          <div key={failure.index} role="alert" className="rounded-md border border-destructive/30 px-3 py-2 text-sm text-destructive">
+            <span className="font-medium">{failure.filename}</span>: {failure.error}
+          </div>
+        ))}
         {result.resumes.map((resume, i) => {
           const scan = resume.injection_scan;
           const hasWarning = scan && !scan.passed;

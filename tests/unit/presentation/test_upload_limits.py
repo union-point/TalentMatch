@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient, Request
 
+from app.application.dto.ingestion import BatchIngestionResult
 from app.config import settings
 from app.main import app
 from app.presentation.api import uploads
@@ -19,7 +20,9 @@ def ingestion(monkeypatch: pytest.MonkeyPatch) -> Iterator[AsyncMock]:
     service = AsyncMock()
     service.ingest_resume.return_value = _make_ingestion_response()
     service.ingest_job_description.return_value = _make_ingestion_response()
-    service.ingest_resumes_batch.return_value = [_make_ingestion_response()]
+    service.ingest_resumes_batch.return_value = BatchIngestionResult(
+        [_make_ingestion_response()], []
+    )
     app.dependency_overrides[get_ingestion_service] = lambda: service
     yield service
     app.dependency_overrides.pop(get_ingestion_service, None)

@@ -198,6 +198,20 @@ Local tests without Docker app container: `uv run pytest` (integration tests nee
 - Deep analysis requires a running Celery worker, Celery beat, and Redis. Run exactly one beat scheduler. Committed pending analyses are dispatched every 30 seconds and retried after publication failures; duplicate deliveries are ignored by an atomic worker claim. No schema migration is required. Claimed jobs have a configurable `DEEP_ANALYSIS_TIMEOUT_SECONDS` budget (default 240 seconds). A periodic recovery task marks abandoned claims failed after that budget plus 60 seconds; users can explicitly retry. Late worker results cannot overwrite recovered failures.
 - Alembic migrations need a live Postgres instance.
 
+### Partial batch uploads
+
+Batch upload commits each document independently. A parsing or persistence failure
+removes that file and rolls back its record, while other files continue. The HTTP
+200 response includes `resumes` for successes and `errors` with zero-based input
+`index`, `filename`, and a safe error message for each failure. `total` counts all
+submitted files; `succeeded + failed = total`. All-file failures also return these
+per-file results. Injection warnings do not count as upload failures.
+
+Both screens show failed filenames and messages. Successful files appear in
+**Unscored resumes**, where they remain available even if the response is lost or
+the page refreshes. Upload only failed files again when retrying a partial batch.
+Request size/count validation still happens before any files are ingested.
+
 ### Upload resource limits
 
 Oversized uploads return HTTP 413. Defaults: 10 MiB per file, 50 MiB total file
