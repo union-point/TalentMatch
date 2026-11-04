@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,11 @@ if TYPE_CHECKING:
 
 class DeepAnalysisModel(Base, UUIDMixin):
     __tablename__ = "deep_analyses"
+    __table_args__ = (
+        CheckConstraint(
+            "overall_score BETWEEN 0 AND 100", name="ck_deep_analyses_overall_score_range"
+        ),
+    )
 
     resume_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=False

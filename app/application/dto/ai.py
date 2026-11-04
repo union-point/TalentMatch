@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class EvidenceItem(BaseModel):
@@ -8,13 +8,13 @@ class EvidenceItem(BaseModel):
 
 class FastTrackResultData(BaseModel):
     pass_fail: bool
-    score: int
+    score: int = Field(ge=0, le=100)
     explanation: str
     candidate_name: str | None = None
 
 
 class DeepAnalysisData(BaseModel):
-    overall_score: int
+    overall_score: int = Field(ge=0, le=100)
     strengths: list[str]
     weaknesses: list[str]
     risks: list[str]

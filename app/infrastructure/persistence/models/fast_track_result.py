@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, Text
+from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,6 +18,9 @@ if TYPE_CHECKING:
 
 class FastTrackResultModel(Base, UUIDMixin):
     __tablename__ = "fast_track_results"
+    __table_args__ = (
+        CheckConstraint("score BETWEEN 0 AND 100", name="ck_fast_track_results_score_range"),
+    )
 
     resume_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=False
