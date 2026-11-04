@@ -10,7 +10,6 @@ import { CandidateTable } from '@/components/candidate-table';
 import { useJobDescription } from '@/hooks/use-job-description';
 import { useBatchUpload } from '@/hooks/use-batch-upload';
 import { useFastTrack } from '@/hooks/use-fast-track';
-import { useCandidates } from '@/hooks/use-candidates';
 import type { BatchUploadResponse } from '@/types';
 
 export function CandidateList() {
@@ -21,10 +20,7 @@ export function CandidateList() {
   const { data: jd, isLoading: jdLoading } = useJobDescription(jdId ?? null);
   const batchUpload = useBatchUpload();
   const fastTrack = useFastTrack();
-  const { data: candidatesData, isLoading: candidatesLoading } = useCandidates({
-    jdId: jdId ?? null,
-    pageSize: 50,
-  });
+
 
   const handleBatchUpload = useCallback(
     async (files: File[]) => {
@@ -44,7 +40,6 @@ export function CandidateList() {
     fastTrack.mutate({ job_description_id: jdId, resume_ids: resumeIds });
   }, [jdId, uploadResult, fastTrack]);
 
-  const candidates = candidatesData?.items ?? [];
 
   if (jdLoading) {
     return (
@@ -106,13 +101,7 @@ export function CandidateList() {
           <CardTitle>Candidates</CardTitle>
         </CardHeader>
         <CardContent>
-          {candidatesLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <CandidateTable candidates={candidates} jdId={jdId ?? null} />
-          )}
+          <CandidateTable key={jdId ?? null} jdId={jdId ?? null} />
         </CardContent>
       </Card>
     </div>

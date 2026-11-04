@@ -139,9 +139,14 @@ curl -s http://localhost:8000/api/v1/analysis/deep/<analysis_id>
 
 | Method | Path | Query |
 |--------|------|--------|
-| `GET` | `/dashboard/jobs/{jd_id}/candidates` | `min_score`, `pass_fail_only`, `q`, `page`, `page_size` |
+| `GET` | `/dashboard/jobs/{jd_id}/candidates` | `min_score`, `status`, `sort_by`, `sort_direction`, `q`, `page`, `page_size` |
 | `GET` | `/dashboard/candidates/{resume_id}/job/{jd_id}` | detail (fast-track + deep) |
 | `GET` | `/dashboard/candidates/{resume_id}/resume-file` | original file download |
+
+Candidate lists paginate and filter on the server. `q` searches names and emails;
+`status` accepts `all`, `pass`, or `fail`; `sort_by` accepts `score`,
+`candidate_name`, or `pass_fail`, with `sort_direction=asc|desc`. The legacy
+`pass_fail_only=true` parameter still applies when `status=all`.
 
 ## Typical workflow
 

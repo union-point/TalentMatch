@@ -122,7 +122,8 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                         filename="test.txt",
                         file_path="test.txt",
                         file_type="txt",
-                        candidate_name=f"Candidate {i}",
+                        candidate_name=f"Candidate {i:03}",
+                        email=f"person{i}@example.com",
                         original_content="large document",
                         normalized_content="large document",
                         injection_scan_passed=True,
@@ -171,7 +172,7 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                 jd_id,
                 min_score=50,
                 pass_fail_only=True,
-                search="CANDIDATE 9",
+                search="CANDIDATE 09",
                 page_size=3,
             )
             assert total == 10
@@ -179,5 +180,32 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
             items, total = await repo.get_ranked_candidates(jd_id, page=6, page_size=20)
             assert items == [] and total == 100
             assert (await repo.get_ranked_candidates(jd_id, search="%"))[1] == 0
+            # Searching is global, including candidates outside the first 50 by score.
+            items, total = await repo.get_ranked_candidates(jd_id, search="PERSON1@EXAMPLE.COM")
+            assert total == 1 and items[0].score == 1
+            items, total = await repo.get_ranked_candidates(
+                jd_id,
+                candidate_filter="fail",
+                sort_by="candidate_name",
+                sort_direction="asc",
+                page=3,
+                page_size=20,
+            )
+            assert total == 50
+            assert [item.score for item in items] == list(range(40, 50))
+            items, total = await repo.get_ranked_candidates(
+                jd_id,
+                sort_by="score",
+                sort_direction="asc",
+                page=4,
+                page_size=20,
+            )
+            assert total == 100 and [item.score for item in items] == list(range(60, 80))
+            first, _ = await repo.get_ranked_candidates(jd_id, sort_by="pass_fail", page_size=100)
+            again, _ = await repo.get_ranked_candidates(jd_id, sort_by="pass_fail", page_size=100)
+            assert [item.resume_id for item in first] == [item.resume_id for item in again]
+            assert all(item.pass_fail for item in first[:50])
+            assert not any(item.pass_fail for item in first[50:])
+
     finally:
         await engine.dispose()

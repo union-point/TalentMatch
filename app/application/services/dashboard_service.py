@@ -17,6 +17,7 @@ from app.domain.ports.repository import (
     JobDescriptionRepository,
     ResumeRepository,
 )
+from app.domain.value_objects import CandidateFilter, CandidateSort, SortDirection
 
 MIME_MAP: dict[str, str] = {
     "pdf": "application/pdf",
@@ -52,13 +53,24 @@ class DashboardService:
         search: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_by: CandidateSort = "score",
+        sort_direction: SortDirection = "desc",
+        candidate_filter: CandidateFilter = "all",
     ) -> PaginatedResult:
         jd = await self._jd_repository.get_by_id(jd_id)
         if jd is None:
             raise JobDescriptionNotFoundError(jd_id)
 
         items, total = await self._fast_track_repository.get_ranked_candidates(
-            jd_id, min_score, pass_fail_only, search, page, page_size
+            jd_id,
+            min_score,
+            pass_fail_only,
+            search,
+            page,
+            page_size,
+            sort_by,
+            sort_direction,
+            candidate_filter,
         )
         return PaginatedResult(
             items=items,

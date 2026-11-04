@@ -172,7 +172,7 @@ class TestGetRankedCandidates:
         assert result.total == 41
         assert result.pages == 3
         mock_fast_track_repo.get_ranked_candidates.assert_awaited_once_with(
-            jd_id, 70, True, "Alice", 3, 20
+            jd_id, 70, True, "Alice", 3, 20, "score", "desc", "all"
         )
         mock_resume_repo.get_by_id.assert_not_awaited()
         mock_deep_repo.get_by_resume_and_jd.assert_not_awaited()

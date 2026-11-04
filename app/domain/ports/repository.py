@@ -6,6 +6,7 @@ from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.ranked_candidate import RankedCandidateItem
 from app.domain.entities.resume import Resume
+from app.domain.value_objects import CandidateFilter, CandidateSort, SortDirection
 
 
 class JobDescriptionRepository(ABC):
@@ -40,6 +41,9 @@ class FastTrackRepository(ABC):
         search: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_by: CandidateSort = "score",
+        sort_direction: SortDirection = "desc",
+        candidate_filter: CandidateFilter = "all",
     ) -> tuple[list[RankedCandidateItem], int]: ...
 
     @abstractmethod

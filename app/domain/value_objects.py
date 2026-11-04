@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import Literal
 
 
 class AnalysisStatus(str, Enum):
@@ -33,3 +34,8 @@ class InjectionScanResult:
     passed: bool
     suspicion_score: int = 0
     details: dict[str, object] | None = None
+
+
+CandidateSort = Literal["score", "candidate_name", "pass_fail"]
+SortDirection = Literal["asc", "desc"]
+CandidateFilter = Literal["all", "pass", "fail"]

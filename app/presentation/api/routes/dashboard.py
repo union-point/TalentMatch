@@ -9,6 +9,7 @@ from app.core.exceptions import (
     JobDescriptionNotFoundError,
     ResumeNotFoundError,
 )
+from app.domain.value_objects import CandidateFilter, CandidateSort, SortDirection
 from app.presentation.api.dependencies import get_dashboard_service
 from app.presentation.schemas.dashboard import (
     CandidateDetailSchema,
@@ -30,9 +31,12 @@ async def get_ranked_candidates(
     jd_id: uuid.UUID,
     min_score: int | None = Query(None, ge=0, le=100),
     pass_fail_only: bool | None = Query(None),
-    q: str | None = Query(None, description="Search by candidate name"),
+    q: str | None = Query(None, description="Search by candidate name or email"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    sort_by: CandidateSort = Query("score"),
+    sort_direction: SortDirection = Query("desc"),
+    candidate_filter: CandidateFilter = Query("all", alias="status"),
     service: DashboardService = Depends(get_dashboard_service),
 ) -> PaginatedResponse:
     try:
@@ -43,6 +47,9 @@ async def get_ranked_candidates(
             search=q,
             page=page,
             page_size=page_size,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            candidate_filter=candidate_filter,
         )
     except JobDescriptionNotFoundError as exc:
         raise HTTPException(

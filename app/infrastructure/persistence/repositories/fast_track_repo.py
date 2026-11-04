@@ -1,11 +1,12 @@
 import uuid
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.entities.ranked_candidate import RankedCandidateItem
 from app.domain.ports.repository import FastTrackRepository
+from app.domain.value_objects import CandidateFilter, CandidateSort, SortDirection
 from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 from app.infrastructure.persistence.models.fast_track_result import FastTrackResultModel
 from app.infrastructure.persistence.models.resume import ResumeModel
@@ -82,6 +83,9 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
         search: str | None = None,
         page: int = 1,
         page_size: int = 20,
+        sort_by: CandidateSort = "score",
+        sort_direction: SortDirection = "desc",
+        candidate_filter: CandidateFilter = "all",
     ) -> tuple[list[RankedCandidateItem], int]:
         latest = (
             select(
@@ -133,15 +137,28 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
         )
         if min_score is not None:
             query = query.where(FastTrackResultModel.score >= min_score)
-        if pass_fail_only:
+        if candidate_filter != "all":
+            query = query.where(FastTrackResultModel.pass_fail.is_(candidate_filter == "pass"))
+        elif pass_fail_only:
             query = query.where(FastTrackResultModel.pass_fail.is_(True))
         if search:
             query = query.where(
-                func.lower(ResumeModel.candidate_name).contains(search.lower(), autoescape=True)
+                or_(
+                    func.lower(ResumeModel.candidate_name).contains(
+                        search.lower(), autoescape=True
+                    ),
+                    func.lower(ResumeModel.email).contains(search.lower(), autoescape=True),
+                )
             )
         total = await self._session.scalar(select(func.count()).select_from(query.subquery()))
+        sort_column = {
+            "score": FastTrackResultModel.score,
+            "candidate_name": func.lower(ResumeModel.candidate_name),
+            "pass_fail": FastTrackResultModel.pass_fail,
+        }[sort_by]
+        order = sort_column.asc() if sort_direction == "asc" else sort_column.desc()
         rows = await self._session.execute(
-            query.order_by(FastTrackResultModel.score.desc(), FastTrackResultModel.resume_id)
+            query.order_by(order.nulls_last(), FastTrackResultModel.resume_id)
             .offset((page - 1) * page_size)
             .limit(page_size)
         )

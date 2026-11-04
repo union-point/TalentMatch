@@ -129,6 +129,9 @@ class TestGetRankedCandidates:
             search="engineer",
             page=2,
             page_size=10,
+            sort_by="score",
+            sort_direction="desc",
+            candidate_filter="all",
         )
 
     @pytest.mark.asyncio
@@ -366,3 +369,11 @@ class TestGetResumeFile:
         mock_dashboard_service.get_resume_file.assert_awaited_once_with(
             resume_id,
         )
+
+
+@pytest.mark.parametrize("query", ["sort_by=unknown", "sort_direction=up", "status=unknown"])
+async def test_rejects_invalid_candidate_order_or_filter(
+    dash_client: AsyncClient, query: str
+) -> None:
+    response = await dash_client.get(f"/api/v1/dashboard/jobs/{uuid.uuid4()}/candidates?{query}")
+    assert response.status_code == 422
