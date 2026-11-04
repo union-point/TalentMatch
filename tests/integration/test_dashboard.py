@@ -18,6 +18,7 @@ from app.core.exceptions import (
 )
 from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.entities.fast_track_result import FastTrackResult
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
 from app.main import app
@@ -91,8 +92,8 @@ class TestGetRankedCandidates:
         mock_dashboard_service: AsyncMock,
     ) -> None:
         jd_id = uuid.uuid4()
-        mock_dashboard_service.get_ranked_candidates.side_effect = (
-            JobDescriptionNotFoundError(jd_id)
+        mock_dashboard_service.get_ranked_candidates.side_effect = JobDescriptionNotFoundError(
+            jd_id
         )
 
         response = await dash_client.get(f"/api/v1/dashboard/jobs/{jd_id}/candidates")
@@ -135,9 +136,7 @@ class TestGetRankedCandidates:
         self,
         dash_client: AsyncClient,
     ) -> None:
-        response = await dash_client.get(
-            "/api/v1/dashboard/jobs/not-a-uuid/candidates"
-        )
+        response = await dash_client.get("/api/v1/dashboard/jobs/not-a-uuid/candidates")
         assert response.status_code == 422
 
     @pytest.mark.asyncio
@@ -169,6 +168,7 @@ class TestGetCandidateDetail:
         resume_id = uuid.uuid4()
         jd_id = uuid.uuid4()
         resume = Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id,
             filename="alice.pdf",
             candidate_name="Alice",
@@ -180,6 +180,7 @@ class TestGetCandidateDetail:
             injection_scan_passed=True,
         )
         fast_track = FastTrackResult(
+            organization_id=TEST_ORG_ID,
             resume_id=resume_id,
             job_description_id=jd_id,
             pass_fail=True,
@@ -187,6 +188,7 @@ class TestGetCandidateDetail:
             explanation="Strong match",
         )
         deep = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             resume_id=resume_id,
             job_description_id=jd_id,
             status=AnalysisStatus.COMPLETED,
@@ -202,9 +204,7 @@ class TestGetCandidateDetail:
             deep_analysis=deep,
         )
 
-        response = await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}"
-        )
+        response = await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -223,13 +223,9 @@ class TestGetCandidateDetail:
     ) -> None:
         resume_id = uuid.uuid4()
         jd_id = uuid.uuid4()
-        mock_dashboard_service.get_candidate_detail.side_effect = ResumeNotFoundError(
-            resume_id
-        )
+        mock_dashboard_service.get_candidate_detail.side_effect = ResumeNotFoundError(resume_id)
 
-        response = await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}"
-        )
+        response = await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}")
 
         assert response.status_code == 404
 
@@ -252,6 +248,7 @@ class TestGetCandidateDetail:
         resume_id = uuid.uuid4()
         jd_id = uuid.uuid4()
         resume = Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id,
             filename="resume.pdf",
             candidate_name="Alice",
@@ -265,9 +262,7 @@ class TestGetCandidateDetail:
             resume=resume,
         )
 
-        await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}"
-        )
+        await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}")
 
         mock_dashboard_service.get_candidate_detail.assert_awaited_once_with(
             resume_id=resume_id,
@@ -283,6 +278,7 @@ class TestGetCandidateDetail:
         resume_id = uuid.uuid4()
         jd_id = uuid.uuid4()
         resume = Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id,
             filename="resume.pdf",
             candidate_name="Alice",
@@ -296,9 +292,7 @@ class TestGetCandidateDetail:
             resume=resume,
         )
 
-        response = await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}"
-        )
+        response = await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/job/{jd_id}")
 
         assert response.status_code == 200
         data = response.json()
@@ -324,9 +318,7 @@ class TestGetResumeFile:
             mime_type="application/pdf",
         )
 
-        response = await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/resume-file"
-        )
+        response = await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/resume-file")
 
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
@@ -339,13 +331,9 @@ class TestGetResumeFile:
         mock_dashboard_service: AsyncMock,
     ) -> None:
         resume_id = uuid.uuid4()
-        mock_dashboard_service.get_resume_file.side_effect = ResumeNotFoundError(
-            resume_id
-        )
+        mock_dashboard_service.get_resume_file.side_effect = ResumeNotFoundError(resume_id)
 
-        response = await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/resume-file"
-        )
+        response = await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/resume-file")
 
         assert response.status_code == 404
 
@@ -354,9 +342,7 @@ class TestGetResumeFile:
         self,
         dash_client: AsyncClient,
     ) -> None:
-        response = await dash_client.get(
-            "/api/v1/dashboard/candidates/not-a-uuid/resume-file"
-        )
+        response = await dash_client.get("/api/v1/dashboard/candidates/not-a-uuid/resume-file")
         assert response.status_code == 422
 
     @pytest.mark.asyncio
@@ -375,9 +361,7 @@ class TestGetResumeFile:
             mime_type="application/pdf",
         )
 
-        await dash_client.get(
-            f"/api/v1/dashboard/candidates/{resume_id}/resume-file"
-        )
+        await dash_client.get(f"/api/v1/dashboard/candidates/{resume_id}/resume-file")
 
         mock_dashboard_service.get_resume_file.assert_awaited_once_with(
             resume_id,

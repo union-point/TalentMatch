@@ -3,11 +3,12 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from sqlalchemy import JSON, MetaData, func, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, MetaData, Uuid, func, select
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.application.services.ingestion_service import IngestionService
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.infrastructure.persistence.models import Base
 from app.infrastructure.persistence.models.resume import ResumeModel
 from app.infrastructure.persistence.repositories.job_description_repo import (
@@ -36,7 +37,7 @@ async def test_upload_failure_removes_file(tmp_path: Path, stage: str, kind: str
         if stage == "commit":
             raise failure
 
-    service = IngestionService(repo, repo, LocalFileStorage(tmp_path), transaction)
+    service = IngestionService(repo, repo, LocalFileStorage(tmp_path), TEST_ORG_ID, transaction)
     with patch(
         "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
     ):
@@ -54,6 +55,8 @@ async def test_mixed_batch_rolls_back_rows_and_files(tmp_path: Path) -> None:
     for table in Base.metadata.sorted_tables:
         copied = table.to_metadata(metadata)
         for column in copied.columns:
+            if isinstance(column.type, UUID):
+                column.type = Uuid(native_uuid=False)
             if isinstance(column.type, JSONB):
                 column.type = JSON()
     try:
@@ -61,9 +64,10 @@ async def test_mixed_batch_rolls_back_rows_and_files(tmp_path: Path) -> None:
             await connection.run_sync(metadata.create_all)
         async with AsyncSession(engine) as session:
             service = IngestionService(
-                SQLAlchemyJobDescriptionRepository(session),
-                SQLAlchemyResumeRepository(session),
+                SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID),
+                SQLAlchemyResumeRepository(session, organization_id=TEST_ORG_ID),
                 LocalFileStorage(tmp_path),
+                TEST_ORG_ID,
                 session.begin,
             )
             parser = AsyncMock()

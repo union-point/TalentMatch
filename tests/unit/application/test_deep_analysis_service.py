@@ -15,6 +15,7 @@ from app.core.exceptions import (
     ResumeNotFoundError,
 )
 from app.domain.entities.deep_analysis import DeepAnalysis
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
@@ -47,6 +48,7 @@ def service(
 @pytest.fixture
 def sample_jd() -> JobDescription:
     return JobDescription(
+        organization_id=TEST_ORG_ID,
         id=uuid.uuid4(),
         title="Software Engineer",
         company="Acme Inc",
@@ -61,6 +63,7 @@ def sample_jd() -> JobDescription:
 @pytest.fixture
 def sample_resume() -> Resume:
     return Resume(
+        organization_id=TEST_ORG_ID,
         id=uuid.uuid4(),
         filename="resume.pdf",
         original_content="Python developer with FastAPI experience",
@@ -88,6 +91,7 @@ class TestDeepAnalysisServiceRequestAnalysis:
         mock_resume_repo.get_by_id.return_value = sample_resume
 
         saved_analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=uuid.uuid4(),
             resume_id=sample_resume.id,
             job_description_id=sample_jd.id,
@@ -193,6 +197,7 @@ class TestDeepAnalysisServiceGetResult:
         mock_deep_repo: AsyncMock,
     ) -> None:
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=uuid.uuid4(),
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
@@ -221,6 +226,7 @@ class TestDeepAnalysisServiceGetResult:
         mock_deep_repo: AsyncMock,
     ) -> None:
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=uuid.uuid4(),
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
@@ -240,6 +246,7 @@ class TestDeepAnalysisServiceGetResult:
         mock_deep_repo: AsyncMock,
     ) -> None:
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=uuid.uuid4(),
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
@@ -259,6 +266,7 @@ class TestDeepAnalysisServiceGetResult:
         mock_deep_repo: AsyncMock,
     ) -> None:
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=uuid.uuid4(),
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),

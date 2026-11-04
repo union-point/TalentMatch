@@ -12,7 +12,10 @@ celery_app = Celery(
 celery_app.autodiscover_tasks(["app.tasks"], related_name="deep_analysis_tasks")
 
 celery_app.conf.update(
+    include=["app.tasks.auth_tasks"],
     beat_schedule={
+        "deliver-auth-email": {"task": "tasks.deliver_auth_email", "schedule": 15.0},
+        "cleanup-identity": {"task": "tasks.cleanup_identity", "schedule": 3600.0},
         "recover-expired-deep-analyses": {
             "task": "tasks.recover_expired_deep_analyses",
             "schedule": 30.0,

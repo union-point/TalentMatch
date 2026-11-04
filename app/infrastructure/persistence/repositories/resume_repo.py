@@ -9,12 +9,16 @@ from app.infrastructure.persistence.models.resume import ResumeModel
 
 
 class SQLAlchemyResumeRepository(ResumeRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, organization_id: uuid.UUID) -> None:
         self._session = session
+        self._organization_id = organization_id
 
     async def save(self, resume: Resume) -> Resume:
+        if resume.organization_id != self._organization_id:
+            raise ValueError("Organization mismatch")
         model = ResumeModel(
             id=resume.id,
+            organization_id=self._organization_id,
             filename=resume.filename,
             candidate_name=resume.candidate_name,
             email=resume.email,
@@ -31,7 +35,11 @@ class SQLAlchemyResumeRepository(ResumeRepository):
         return self._to_domain(model)
 
     async def update(self, resume: Resume) -> Resume:
-        model = await self._session.get(ResumeModel, resume.id)
+        model = await self._session.scalar(
+            select(ResumeModel).where(
+                ResumeModel.id == resume.id, ResumeModel.organization_id == self._organization_id
+            )
+        )
         if model is None:
             raise ValueError(f"Resume {resume.id} not found")
         model.candidate_name = resume.candidate_name
@@ -41,7 +49,11 @@ class SQLAlchemyResumeRepository(ResumeRepository):
         return self._to_domain(model)
 
     async def get_by_id(self, resume_id: uuid.UUID) -> Resume | None:
-        result = await self._session.execute(select(ResumeModel).where(ResumeModel.id == resume_id))
+        result = await self._session.execute(
+            select(ResumeModel).where(
+                ResumeModel.organization_id == self._organization_id, ResumeModel.id == resume_id
+            )
+        )
         model = result.scalar_one_or_none()
         if model is None:
             return None
@@ -50,6 +62,7 @@ class SQLAlchemyResumeRepository(ResumeRepository):
     def _to_domain(self, model: ResumeModel) -> Resume:
         return Resume(
             id=model.id,
+            organization_id=model.organization_id,
             filename=model.filename,
             candidate_name=model.candidate_name,
             email=model.email,

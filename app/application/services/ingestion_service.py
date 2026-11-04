@@ -1,4 +1,5 @@
 import logging
+import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, nullcontext
 from pathlib import Path
@@ -22,8 +23,10 @@ class IngestionService:
         jd_repository: JobDescriptionRepository,
         resume_repository: ResumeRepository,
         file_storage: FileStorage,
+        organization_id: uuid.UUID,
         transaction: Callable[[], AbstractAsyncContextManager[object]] = nullcontext,
     ) -> None:
+        self._organization_id = organization_id
         self._jd_repository = jd_repository
         self._resume_repository = resume_repository
         self._file_storage = file_storage
@@ -46,6 +49,7 @@ class IngestionService:
         injection_result = detect_injection(raw_text)
 
         jd = JobDescription(
+            organization_id=self._organization_id,
             title=title,
             company=company,
             original_content=raw_text,
@@ -83,6 +87,7 @@ class IngestionService:
         injection_result = detect_injection(raw_text)
 
         resume = Resume(
+            organization_id=self._organization_id,
             filename=filename,
             original_content=raw_text,
             normalized_content=normalized,

@@ -16,7 +16,7 @@ from app.domain.value_objects import AnalysisStatus
 from app.infrastructure.ai import AIServiceFactory
 from app.infrastructure.persistence.database import engine
 from app.infrastructure.persistence.repositories.deep_analysis_repo import (
-    SQLAlchemyDeepAnalysisRepository,
+    SQLAlchemyDeepAnalysisWorkerRepository,
 )
 from app.infrastructure.persistence.repositories.job_description_repo import (
     SQLAlchemyJobDescriptionRepository,
@@ -38,16 +38,17 @@ async def _run_deep_analysis_async(analysis_id_str: str) -> None:
     await engine.dispose()
 
     async with AsyncSession(engine) as session:
-        deep_repo = SQLAlchemyDeepAnalysisRepository(session)
-        resume_repo = SQLAlchemyResumeRepository(session)
-        jd_repo = SQLAlchemyJobDescriptionRepository(session)
+        worker_repo = SQLAlchemyDeepAnalysisWorkerRepository(session)
 
-        analysis = await deep_repo.claim_pending(analysis_id)
+        analysis = await worker_repo.claim_pending(analysis_id)
         if analysis is None:
             logger.info("Deep analysis %s is absent or already claimed; skipping.", analysis_id)
             return
 
         await session.commit()
+        deep_repo = worker_repo
+        resume_repo = SQLAlchemyResumeRepository(session, analysis.organization_id)
+        jd_repo = SQLAlchemyJobDescriptionRepository(session, analysis.organization_id)
 
         try:
             async with asyncio.timeout(settings.deep_analysis_timeout_seconds):
@@ -100,7 +101,7 @@ async def _dispatch_pending_deep_analyses_async() -> None:
     """
     await engine.dispose()
     async with AsyncSession(engine) as session:
-        analysis_ids = await SQLAlchemyDeepAnalysisRepository(session).lease_pending_dispatch(
+        analysis_ids = await SQLAlchemyDeepAnalysisWorkerRepository(session).lease_pending_dispatch(
             settings.deep_analysis_dispatch_batch_size,
             settings.deep_analysis_dispatch_retry_seconds,
         )
@@ -125,5 +126,5 @@ async def _recover_expired_deep_analyses_async() -> None:
         cutoff = datetime.now(timezone.utc) - timedelta(
             seconds=settings.deep_analysis_timeout_seconds + 60
         )
-        await SQLAlchemyDeepAnalysisRepository(session).fail_expired_claims(cutoff)
+        await SQLAlchemyDeepAnalysisWorkerRepository(session).fail_expired_claims(cutoff)
         await session.commit()

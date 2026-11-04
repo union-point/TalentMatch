@@ -5,6 +5,7 @@ from datetime import datetime
 
 @dataclass
 class Resume:
+    organization_id: uuid.UUID = field(kw_only=True)
     filename: str
     original_content: str
     normalized_content: str

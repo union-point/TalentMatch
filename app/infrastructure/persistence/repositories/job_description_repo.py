@@ -9,12 +9,16 @@ from app.infrastructure.persistence.models.job_description import JobDescription
 
 
 class SQLAlchemyJobDescriptionRepository(JobDescriptionRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, organization_id: uuid.UUID) -> None:
         self._session = session
+        self._organization_id = organization_id
 
     async def save(self, jd: JobDescription) -> JobDescription:
+        if jd.organization_id != self._organization_id:
+            raise ValueError("Organization mismatch")
         model = JobDescriptionModel(
             id=jd.id,
+            organization_id=self._organization_id,
             title=jd.title,
             company=jd.company,
             original_content=jd.original_content,
@@ -30,7 +34,10 @@ class SQLAlchemyJobDescriptionRepository(JobDescriptionRepository):
 
     async def get_by_id(self, jd_id: uuid.UUID) -> JobDescription | None:
         result = await self._session.execute(
-            select(JobDescriptionModel).where(JobDescriptionModel.id == jd_id)
+            select(JobDescriptionModel).where(
+                JobDescriptionModel.organization_id == self._organization_id,
+                JobDescriptionModel.id == jd_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model is None:
@@ -39,13 +46,16 @@ class SQLAlchemyJobDescriptionRepository(JobDescriptionRepository):
 
     async def get_all(self) -> list[JobDescription]:
         result = await self._session.execute(
-            select(JobDescriptionModel).order_by(JobDescriptionModel.created_at.desc())
+            select(JobDescriptionModel)
+            .where(JobDescriptionModel.organization_id == self._organization_id)
+            .order_by(JobDescriptionModel.created_at.desc())
         )
         return [self._to_domain(model) for model in result.scalars().all()]
 
     def _to_domain(self, model: JobDescriptionModel) -> JobDescription:
         return JobDescription(
             id=model.id,
+            organization_id=model.organization_id,
             title=model.title,
             company=model.company,
             original_content=model.original_content,

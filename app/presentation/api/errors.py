@@ -8,6 +8,7 @@ from app.core.exceptions import (
     AIResponseError,
     AnalysisNotFoundError,
     FileNotFoundError,
+    IdentityConflictError,
     InjectionDetectedError,
     JobDescriptionNotFoundError,
     ParsingError,
@@ -20,6 +21,7 @@ from app.core.logging_config import request_id_var
 logger = logging.getLogger(__name__)
 
 HTTP_STATUS_MAP: dict[type[Exception], int] = {
+    IdentityConflictError: 409,
     UnsupportedFileTypeError: 400,
     ParsingError: 422,
     InjectionDetectedError: 422,
@@ -95,3 +97,16 @@ async def validation_exception_handler(request: Request, exc: Exception) -> JSON
     return _make_problem_response(
         422, "ValidationError", "Request validation failed.", request_id, extra
     )
+
+
+async def auth_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    from app.application.services.auth_sessions import AuthError
+    from app.infrastructure.security.auth_throttle import ThrottleError
+
+    assert isinstance(exc, AuthError)
+    request_id = getattr(request.state, "request_id", None) or request_id_var.get()
+    response = _make_problem_response(exc.status, exc.code, exc.detail, request_id)
+    response.headers["Cache-Control"] = "no-store"
+    if isinstance(exc, ThrottleError):
+        response.headers["Retry-After"] = str(exc.retry_after)
+    return response

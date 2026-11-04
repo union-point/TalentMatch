@@ -14,6 +14,7 @@ from app.core.exceptions import (
     ResumeNotFoundError,
 )
 from app.domain.entities.deep_analysis import DeepAnalysis
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.value_objects import AnalysisStatus
 from app.main import app
 from app.presentation.api.dependencies import get_deep_analysis_service
@@ -142,6 +143,7 @@ class TestDeepAnalysisGetEndpoint:
     ) -> None:
         analysis_id = uuid.uuid4()
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=analysis_id,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
@@ -266,6 +268,7 @@ class TestDeepAnalysisGetEndpoint:
     ) -> None:
         analysis_id = uuid.uuid4()
         analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             id=analysis_id,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),

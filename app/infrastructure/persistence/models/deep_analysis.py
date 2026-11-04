@@ -4,7 +4,16 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,19 +28,28 @@ if TYPE_CHECKING:
 
 class DeepAnalysisModel(Base, UUIDMixin):
     __tablename__ = "deep_analyses"
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id"), nullable=False, index=True
+    )
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["resume_id", "organization_id"],
+            ["resumes.id", "resumes.organization_id"],
+            name="fk_deep_analysis_resume_organization",
+        ),
+        ForeignKeyConstraint(
+            ["job_description_id", "organization_id"],
+            ["job_descriptions.id", "job_descriptions.organization_id"],
+            name="fk_deep_analysis_job_organization",
+        ),
         Index("ix_deep_analyses_dispatch", "status", "next_dispatch_at"),
         CheckConstraint(
             "overall_score BETWEEN 0 AND 100", name="ck_deep_analyses_overall_score_range"
         ),
     )
 
-    resume_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("resumes.id"), nullable=False
-    )
-    job_description_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("job_descriptions.id"), nullable=False
-    )
+    resume_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    job_description_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     overall_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     strengths: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     weaknesses: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
@@ -45,5 +63,11 @@ class DeepAnalysisModel(Base, UUIDMixin):
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    resume: Mapped[ResumeModel] = relationship(back_populates="deep_analyses")
-    job_description: Mapped[JobDescriptionModel] = relationship(back_populates="deep_analyses")
+    resume: Mapped[ResumeModel] = relationship(
+        overlaps="resume,job_description,fast_track_results,deep_analyses",
+        back_populates="deep_analyses",
+    )
+    job_description: Mapped[JobDescriptionModel] = relationship(
+        overlaps="resume,job_description,fast_track_results,deep_analyses",
+        back_populates="deep_analyses",
+    )

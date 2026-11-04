@@ -11,6 +11,7 @@ from app.core.exceptions import (
 )
 from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.entities.fast_track_result import FastTrackResult
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
@@ -74,6 +75,7 @@ def resume_id_2() -> uuid.UUID:
 @pytest.fixture
 def sample_jd(jd_id: uuid.UUID) -> JobDescription:
     return JobDescription(
+        organization_id=TEST_ORG_ID,
         id=jd_id,
         title="Software Engineer",
         company="Acme",
@@ -88,6 +90,7 @@ def sample_jd(jd_id: uuid.UUID) -> JobDescription:
 @pytest.fixture
 def sample_resume_1(resume_id_1: uuid.UUID) -> Resume:
     return Resume(
+        organization_id=TEST_ORG_ID,
         id=resume_id_1,
         filename="alice.pdf",
         candidate_name="Alice",
@@ -103,6 +106,7 @@ def sample_resume_1(resume_id_1: uuid.UUID) -> Resume:
 @pytest.fixture
 def sample_resume_2(resume_id_2: uuid.UUID) -> Resume:
     return Resume(
+        organization_id=TEST_ORG_ID,
         id=resume_id_2,
         filename="bob.pdf",
         candidate_name="Bob",
@@ -118,6 +122,7 @@ def sample_resume_2(resume_id_2: uuid.UUID) -> Resume:
 @pytest.fixture
 def fast_track_1(resume_id_1: uuid.UUID, jd_id: uuid.UUID) -> FastTrackResult:
     return FastTrackResult(
+        organization_id=TEST_ORG_ID,
         resume_id=resume_id_1,
         job_description_id=jd_id,
         pass_fail=True,
@@ -129,6 +134,7 @@ def fast_track_1(resume_id_1: uuid.UUID, jd_id: uuid.UUID) -> FastTrackResult:
 @pytest.fixture
 def fast_track_2(resume_id_2: uuid.UUID, jd_id: uuid.UUID) -> FastTrackResult:
     return FastTrackResult(
+        organization_id=TEST_ORG_ID,
         resume_id=resume_id_2,
         job_description_id=jd_id,
         pass_fail=False,
@@ -140,6 +146,7 @@ def fast_track_2(resume_id_2: uuid.UUID, jd_id: uuid.UUID) -> FastTrackResult:
 @pytest.fixture
 def deep_analysis_1(resume_id_1: uuid.UUID, jd_id: uuid.UUID) -> DeepAnalysis:
     return DeepAnalysis(
+        organization_id=TEST_ORG_ID,
         resume_id=resume_id_1,
         job_description_id=jd_id,
         status=AnalysisStatus.COMPLETED,
@@ -276,6 +283,7 @@ class TestGetResumeFile:
         file_path = tmp_path / "alice.pdf"
         file_path.write_text("fake content")
         resume = Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id_1,
             filename="alice.pdf",
             candidate_name="Alice",
@@ -316,6 +324,7 @@ class TestGetResumeFile:
         file_path = tmp_path / "resume.html"
         file_path.write_text("<html></html>")
         resume = Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id_1,
             filename="resume.html",
             candidate_name="Alice",

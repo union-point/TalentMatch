@@ -5,6 +5,7 @@ import pytest
 
 from app.application.dto.ai import DeepAnalysisData, EvidenceItem
 from app.domain.entities.deep_analysis import DeepAnalysis
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
@@ -55,7 +56,7 @@ async def test_post_claim_failures_are_recorded_after_rollback(
     with (
         patch.object(tasks, "engine", _make_mock_engine()),
         patch.object(tasks, "AsyncSession", return_value=session),
-        patch.object(tasks, "SQLAlchemyDeepAnalysisRepository", return_value=deep),
+        patch.object(tasks, "SQLAlchemyDeepAnalysisWorkerRepository", return_value=deep),
         patch.object(tasks, "SQLAlchemyResumeRepository", return_value=resumes),
         patch.object(tasks, "SQLAlchemyJobDescriptionRepository", return_value=jobs),
         patch.object(tasks.AIServiceFactory, "create", return_value=ai) as factory,
@@ -79,6 +80,7 @@ def _make_mock_engine() -> AsyncMock:
 @pytest.fixture
 def sample_jd() -> JobDescription:
     return JobDescription(
+        organization_id=TEST_ORG_ID,
         id=uuid.uuid4(),
         title="Software Engineer",
         company="Acme Inc",
@@ -93,6 +95,7 @@ def sample_jd() -> JobDescription:
 @pytest.fixture
 def sample_resume() -> Resume:
     return Resume(
+        organization_id=TEST_ORG_ID,
         id=uuid.uuid4(),
         filename="resume.pdf",
         original_content="Python developer with FastAPI experience",
@@ -107,6 +110,7 @@ def sample_resume() -> Resume:
 @pytest.fixture
 def pending_analysis(sample_resume: Resume, sample_jd: JobDescription) -> DeepAnalysis:
     return DeepAnalysis(
+        organization_id=TEST_ORG_ID,
         id=uuid.uuid4(),
         resume_id=sample_resume.id,
         job_description_id=sample_jd.id,
@@ -155,7 +159,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -209,7 +213,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -254,7 +258,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -302,7 +306,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -353,7 +357,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -422,7 +426,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -482,7 +486,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -548,7 +552,7 @@ class TestDeepAnalysisTaskAsync:
                 return_value=mock_session,
             ),
             patch(
-                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository",
+                "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
                 return_value=deep_repo,
             ),
             patch(
@@ -591,7 +595,10 @@ async def test_dispatch_commits_leases_before_publication_and_continues_on_failu
     with (
         patch("app.tasks.deep_analysis_tasks.AsyncSession", return_value=session),
         patch("app.tasks.deep_analysis_tasks.engine", _make_mock_engine()),
-        patch("app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository", return_value=repo),
+        patch(
+            "app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisWorkerRepository",
+            return_value=repo,
+        ),
         patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay", side_effect=publish) as send,
     ):
         await _dispatch_pending_deep_analyses_async()

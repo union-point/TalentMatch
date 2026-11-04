@@ -5,11 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.ingestion_service import IngestionService
 from app.config import settings
+from app.domain.entities.identity import Principal
 from app.domain.value_objects import InjectionScanResult
 from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories.job_description_repo import (
     SQLAlchemyJobDescriptionRepository,
 )
+from app.presentation.api.auth_dependencies import get_principal
 from app.presentation.api.dependencies import get_ingestion_service
 from app.presentation.api.uploads import read_upload
 from app.presentation.schemas.job_description import (
@@ -63,8 +65,9 @@ async def upload_job_description(
 )
 async def list_job_descriptions(
     session: AsyncSession = Depends(get_db),
+    actor: Principal = Depends(get_principal),
 ) -> JobDescriptionListResponse:
-    repo = SQLAlchemyJobDescriptionRepository(session)
+    repo = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
     items = await repo.get_all()
     return JobDescriptionListResponse(
         items=[
@@ -90,8 +93,9 @@ async def list_job_descriptions(
 async def get_job_description(
     jd_id: uuid.UUID,
     session: AsyncSession = Depends(get_db),
+    actor: Principal = Depends(get_principal),
 ) -> JobDescriptionDetailResponse:
-    repo = SQLAlchemyJobDescriptionRepository(session)
+    repo = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
     jd = await repo.get_by_id(jd_id)
     if jd is None:
         raise HTTPException(

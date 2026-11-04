@@ -50,6 +50,7 @@ plugins = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
+    "real_auth: exercise real authentication without identity overrides",
     "integration: marks tests that require a running PostgreSQL database",
 ]
 

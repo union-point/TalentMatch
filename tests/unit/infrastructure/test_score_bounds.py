@@ -2,12 +2,13 @@ import uuid
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import JSON, MetaData
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, MetaData, Uuid
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.application.dto.ai import DeepAnalysisData, FastTrackResultData
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.infrastructure.persistence.models import Base
 from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 from app.infrastructure.persistence.models.fast_track_result import FastTrackResultModel
@@ -50,6 +51,8 @@ async def test_database_enforces_bounds_and_allows_pending_null_score() -> None:
     for table in Base.metadata.sorted_tables:
         copied = table.to_metadata(metadata)
         for column in copied.columns:
+            if isinstance(column.type, UUID):
+                column.type = Uuid(native_uuid=False)
             if isinstance(column.type, JSONB):
                 column.type = JSON()
     try:
@@ -59,6 +62,7 @@ async def test_database_enforces_bounds_and_allows_pending_null_score() -> None:
             for score in [-1, 101, 999, 0, 100]:
                 for model in [
                     FastTrackResultModel(
+                        organization_id=TEST_ORG_ID,
                         resume_id=uuid.uuid4(),
                         job_description_id=uuid.uuid4(),
                         score=score,
@@ -66,6 +70,7 @@ async def test_database_enforces_bounds_and_allows_pending_null_score() -> None:
                         explanation="Match",
                     ),
                     DeepAnalysisModel(
+                        organization_id=TEST_ORG_ID,
                         resume_id=uuid.uuid4(),
                         job_description_id=uuid.uuid4(),
                         overall_score=score,
@@ -81,7 +86,10 @@ async def test_database_enforces_bounds_and_allows_pending_null_score() -> None:
                     await session.rollback()
             session.add(
                 DeepAnalysisModel(
-                    resume_id=uuid.uuid4(), job_description_id=uuid.uuid4(), status="pending"
+                    organization_id=TEST_ORG_ID,
+                    resume_id=uuid.uuid4(),
+                    job_description_id=uuid.uuid4(),
+                    status="pending",
                 )
             )
             await session.flush()

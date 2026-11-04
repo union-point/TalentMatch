@@ -95,3 +95,30 @@ class RateLimitMiddleware:
 
         history.append(now)
         await self.app(scope, receive, send)
+
+
+class PrivateResponseMiddleware:
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        async def private_send(message: Message) -> None:
+            if message["type"] == "http.response.start" and scope.get("path", "").startswith(
+                "/api/"
+            ):
+                headers = [
+                    (k, v)
+                    for k, v in message.get("headers", [])
+                    if k.lower() not in {b"cache-control", b"referrer-policy"}
+                ]
+                headers.extend(
+                    [
+                        (b"cache-control", b"no-store"),
+                        (b"referrer-policy", b"no-referrer"),
+                        (b"x-content-type-options", b"nosniff"),
+                    ]
+                )
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, private_send)

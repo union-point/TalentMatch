@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.core.exceptions import UnsupportedFileTypeError
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.value_objects import InjectionScanResult
 from app.infrastructure.parsing.parser_factory import SUPPORTED_EXTENSIONS, get_parser_for_file
 from app.infrastructure.security.prompt_injection_detector import detect_injection
@@ -244,7 +245,9 @@ class TestIngestionServiceUnit:
         )
         mock_resume_repo = AsyncMock()
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(mock_jd_repo, mock_resume_repo, file_storage)
+        service = IngestionService(
+            mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
+        )
 
         html_content = b"""<!DOCTYPE html>
 <html><body><h1>Engineer JD</h1><p>Looking for engineer</p></body></html>"""
@@ -284,7 +287,9 @@ class TestIngestionServiceUnit:
         )
 
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(mock_jd_repo, mock_resume_repo, file_storage)
+        service = IngestionService(
+            mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
+        )
 
         resume_html = b"""<!DOCTYPE html>
 <html><body>
@@ -333,7 +338,9 @@ class TestIngestionServiceUnit:
         )
 
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(mock_jd_repo, mock_resume_repo, file_storage)
+        service = IngestionService(
+            mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
+        )
 
         content = b"""<!DOCTYPE html>
 <html><body>

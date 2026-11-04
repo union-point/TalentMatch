@@ -2,15 +2,17 @@ import uuid
 from unittest.mock import patch
 
 import pytest_asyncio
-from sqlalchemy import JSON, MetaData
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, MetaData, Uuid
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
 from app.domain.entities.deep_analysis import DeepAnalysis
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.value_objects import AnalysisStatus
 from app.infrastructure.persistence.models import Base
 from app.infrastructure.persistence.repositories.deep_analysis_repo import (
     SQLAlchemyDeepAnalysisRepository,
+    SQLAlchemyDeepAnalysisWorkerRepository,
 )
 from app.tasks.deep_analysis_tasks import _dispatch_pending_deep_analyses_async
 
@@ -23,6 +25,8 @@ async def dispatch_engine(tmp_path):
     for table in Base.metadata.sorted_tables:
         copied = table.to_metadata(metadata)
         for column in copied.columns:
+            if isinstance(column.type, UUID):
+                column.type = Uuid(native_uuid=False)
             if isinstance(column.type, JSONB):
                 column.type = JSON()
     async with engine.begin() as connection:
@@ -38,19 +42,25 @@ async def test_only_committed_intents_are_published_and_rollback_is_invisible(di
         patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay") as publish,
     ):
         async with AsyncSession(engine) as session:
-            repo = SQLAlchemyDeepAnalysisRepository(session)
-            analysis = DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4())
+            repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
+            analysis = DeepAnalysis(
+                organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+            )
             await repo.save(analysis)
             await _dispatch_pending_deep_analyses_async()
             publish.assert_not_called()
             await session.commit()
             await _dispatch_pending_deep_analyses_async()
             publish.assert_called_once_with(str(analysis.id))
-            claimed = await repo.claim_pending(analysis.id)
+            claimed = await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(
+                analysis.id
+            )
             assert claimed.status == AnalysisStatus.IN_PROGRESS
             await session.commit()
             publish.reset_mock()
-            rolled_back = DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4())
+            rolled_back = DeepAnalysis(
+                organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+            )
             await repo.save(rolled_back)
             await session.rollback()
             await _dispatch_pending_deep_analyses_async()
@@ -59,21 +69,27 @@ async def test_only_committed_intents_are_published_and_rollback_is_invisible(di
 
 async def test_duplicate_claims_and_terminal_redelivery_do_no_work(dispatch_engine):
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
-        analysis = DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4())
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
+        analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+        )
         await repo.save(analysis)
         await session.commit()
-        first = await repo.claim_pending(analysis.id)
+        first = await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(analysis.id)
         assert first.status == AnalysisStatus.IN_PROGRESS
         await session.commit()
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
-        assert await repo.claim_pending(analysis.id) is None
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
+        assert (
+            await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(analysis.id) is None
+        )
 
         first.status = AnalysisStatus.COMPLETED
         await repo.save(first)
         await session.commit()
-        assert await repo.claim_pending(analysis.id) is None
+        assert (
+            await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(analysis.id) is None
+        )
 
 
 async def test_recovery_expires_only_stale_claims_and_rejects_late_results(
@@ -87,14 +103,17 @@ async def test_recovery_expires_only_stale_claims_and_rejects_late_results(
     from app.tasks.deep_analysis_tasks import _recover_expired_deep_analyses_async
 
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
         stale, fresh, pending = [
-            DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()) for _ in range(3)
+            DeepAnalysis(
+                organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+            )
+            for _ in range(3)
         ]
         for analysis in (stale, fresh, pending):
             await repo.save(analysis)
-        await repo.claim_pending(stale.id)
-        await repo.claim_pending(fresh.id)
+        await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(stale.id)
+        await SQLAlchemyDeepAnalysisWorkerRepository(session).claim_pending(fresh.id)
         await session.execute(
             update(DeepAnalysisModel)
             .where(DeepAnalysisModel.id == stale.id)
@@ -106,12 +125,12 @@ async def test_recovery_expires_only_stale_claims_and_rejects_late_results(
         await _recover_expired_deep_analyses_async()
 
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
         assert (await repo.get_by_id(stale.id)).status == AnalysisStatus.FAILED
         assert (await repo.get_by_id(fresh.id)).status == AnalysisStatus.IN_PROGRESS
         assert (await repo.get_by_id(pending.id)).status == AnalysisStatus.PENDING
         stale.status = AnalysisStatus.COMPLETED
-        assert not await repo.finish_claim(stale)
+        assert not await SQLAlchemyDeepAnalysisWorkerRepository(session).finish_claim(stale)
         assert (await repo.get_by_id(stale.id)).status == AnalysisStatus.FAILED
 
 
@@ -125,7 +144,7 @@ async def test_pair_lookup_selects_latest_attempt_with_deterministic_ties(
     resume_id, jd_id = uuid.uuid4(), uuid.uuid4()
     now = datetime.now(timezone.utc)
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
         assert await repo.get_by_resume_and_jd(resume_id, jd_id) is None
         for number, created_at, status in [
             (3, now - timedelta(days=1), AnalysisStatus.COMPLETED),
@@ -134,6 +153,7 @@ async def test_pair_lookup_selects_latest_attempt_with_deterministic_ties(
         ]:
             session.add(
                 DeepAnalysisModel(
+                    organization_id=TEST_ORG_ID,
                     id=uuid.UUID(int=15 * 2**124 + number),
                     resume_id=resume_id,
                     job_description_id=jd_id,
@@ -159,9 +179,12 @@ async def test_dispatch_bounds_backlog_and_retries_only_expired_leases(dispatch_
     from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
         analyses = [
-            DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()) for _ in range(5)
+            DeepAnalysis(
+                organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+            )
+            for _ in range(5)
         ]
         for analysis in analyses:
             await repo.save(analysis)
@@ -202,10 +225,16 @@ async def test_dispatch_bounds_backlog_and_retries_only_expired_leases(dispatch_
 
 async def test_uncommitted_lease_is_retried_after_dispatcher_crash(dispatch_engine) -> None:
     async with AsyncSession(dispatch_engine) as session:
-        repo = SQLAlchemyDeepAnalysisRepository(session)
-        analysis = DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4())
+        repo = SQLAlchemyDeepAnalysisRepository(session, organization_id=TEST_ORG_ID)
+        analysis = DeepAnalysis(
+            organization_id=TEST_ORG_ID, resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()
+        )
         await repo.save(analysis)
         await session.commit()
-        assert await repo.lease_pending_dispatch(1, 900) == [analysis.id]
+        assert await SQLAlchemyDeepAnalysisWorkerRepository(session).lease_pending_dispatch(
+            1, 900
+        ) == [analysis.id]
         await session.rollback()
-        assert await repo.lease_pending_dispatch(1, 900) == [analysis.id]
+        assert await SQLAlchemyDeepAnalysisWorkerRepository(session).lease_pending_dispatch(
+            1, 900
+        ) == [analysis.id]

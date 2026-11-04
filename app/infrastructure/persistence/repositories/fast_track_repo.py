@@ -12,12 +12,16 @@ from app.infrastructure.persistence.models.resume import ResumeModel
 
 
 class SQLAlchemyFastTrackRepository(FastTrackRepository):
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, organization_id: uuid.UUID) -> None:
         self._session = session
+        self._organization_id = organization_id
 
     async def save(self, result: FastTrackResult) -> FastTrackResult:
+        if result.organization_id != self._organization_id:
+            raise ValueError("Organization mismatch")
         model = FastTrackResultModel(
             id=result.id,
+            organization_id=self._organization_id,
             resume_id=result.resume_id,
             job_description_id=result.job_description_id,
             pass_fail=result.pass_fail,
@@ -31,7 +35,10 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
 
     async def get_by_id(self, result_id: uuid.UUID) -> FastTrackResult | None:
         result = await self._session.execute(
-            select(FastTrackResultModel).where(FastTrackResultModel.id == result_id)
+            select(FastTrackResultModel).where(
+                FastTrackResultModel.organization_id == self._organization_id,
+                FastTrackResultModel.id == result_id,
+            )
         )
         model = result.scalar_one_or_none()
         if model is None:
@@ -53,7 +60,10 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
                 )
                 .label("position"),
             )
-            .where(FastTrackResultModel.job_description_id == jd_id)
+            .where(
+                FastTrackResultModel.organization_id == self._organization_id,
+                FastTrackResultModel.job_description_id == jd_id,
+            )
             .subquery()
         )
         result = await self._session.execute(
@@ -86,12 +96,16 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
                 )
                 .label("position"),
             )
-            .where(FastTrackResultModel.job_description_id == jd_id)
+            .where(
+                FastTrackResultModel.organization_id == self._organization_id,
+                FastTrackResultModel.job_description_id == jd_id,
+            )
             .subquery()
         )
         has_deep = (
             select(DeepAnalysisModel.id)
             .where(
+                DeepAnalysisModel.organization_id == self._organization_id,
                 DeepAnalysisModel.resume_id == ResumeModel.id,
                 DeepAnalysisModel.job_description_id == jd_id,
             )
@@ -111,7 +125,11 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
             )
             .join(latest, latest.c.id == FastTrackResultModel.id)
             .join(ResumeModel, ResumeModel.id == FastTrackResultModel.resume_id)
-            .where(latest.c.position == 1)
+            .where(
+                latest.c.position == 1,
+                ResumeModel.organization_id == self._organization_id,
+                FastTrackResultModel.organization_id == self._organization_id,
+            )
         )
         if min_score is not None:
             query = query.where(FastTrackResultModel.score >= min_score)
@@ -146,6 +164,7 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
     def _to_domain(self, model: FastTrackResultModel) -> FastTrackResult:
         return FastTrackResult(
             id=model.id,
+            organization_id=model.organization_id,
             resume_id=model.resume_id,
             job_description_id=model.job_description_id,
             pass_fail=model.pass_fail,

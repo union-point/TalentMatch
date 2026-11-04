@@ -1,4 +1,5 @@
 import asyncio
+import os
 import tempfile
 from collections.abc import AsyncGenerator
 from pathlib import Path
@@ -10,6 +11,16 @@ from httpx import ASGITransport, AsyncClient
 
 from app.application.dto.ingestion import IngestionResponse
 from app.domain.value_objects import InjectionScanResult
+
+os.environ.setdefault(
+    "DATABASE_URL", "postgresql+asyncpg://unused:unused@localhost/talentmatch_unit"
+)
+os.environ.setdefault("GEMINI_API_KEY", "test-key")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/15")
+os.environ.setdefault("CORS_ORIGINS", '["http://test"]')
+os.environ.setdefault("ENVIRONMENT", "test")
+os.environ.setdefault("PUBLIC_ORIGIN", "http://test")
+os.environ.setdefault("AUTH_ALLOW_INSECURE_COOKIES", "true")
 
 
 @pytest.fixture(scope="session")
@@ -146,3 +157,21 @@ async def client(temp_dir) -> AsyncGenerator[AsyncClient, None]:
         yield c
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def hiring_identity(request):
+    if request.node.get_closest_marker("real_auth"):
+        yield
+        return
+    from uuid import UUID
+
+    from app.domain.entities.identity import LEGACY_ORGANIZATION_ID, Principal
+    from app.main import app
+    from app.presentation.api.auth_dependencies import get_principal
+
+    app.dependency_overrides[get_principal] = lambda: Principal(
+        UUID("00000000-0000-4000-8000-000000000002"), LEGACY_ORGANIZATION_ID, "owner"
+    )
+    yield
+    app.dependency_overrides.pop(get_principal, None)

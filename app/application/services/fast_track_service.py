@@ -57,6 +57,7 @@ class FastTrackService:
                 semaphore=semaphore,
                 jd_text=jd.normalized_content,
                 jd_id=job_description_id,
+                organization_id=jd.organization_id,
                 resume_id=resume_id,
             )
             for resume_id in resume_ids
@@ -70,10 +71,13 @@ class FastTrackService:
         semaphore: asyncio.Semaphore,
         jd_text: str,
         jd_id: uuid.UUID,
+        organization_id: uuid.UUID,
         resume_id: uuid.UUID,
     ) -> FastTrackResultDTO:
         try:
-            return await self._analyze_single_impl(semaphore, jd_text, jd_id, resume_id)
+            return await self._analyze_single_impl(
+                semaphore, jd_text, jd_id, organization_id, resume_id
+            )
         except Exception as exc:
             logger.exception("Fast-track failed for resume %s", resume_id)
             return FastTrackResultDTO(resume_id=resume_id, error=public_error_message(exc))
@@ -83,6 +87,7 @@ class FastTrackService:
         semaphore: asyncio.Semaphore,
         jd_text: str,
         jd_id: uuid.UUID,
+        organization_id: uuid.UUID,
         resume_id: uuid.UUID,
     ) -> FastTrackResultDTO:
         async with self._db_lock, self._transaction():
@@ -120,6 +125,7 @@ class FastTrackService:
                 await self._resume_repository.update(resume)
 
             entity = FastTrackResult(
+                organization_id=organization_id,
                 resume_id=resume_id,
                 job_description_id=jd_id,
                 pass_fail=data.pass_fail,

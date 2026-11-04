@@ -44,6 +44,7 @@ class DeepAnalysisService:
             raise ResumeNotFoundError(resume_id)
 
         analysis = DeepAnalysis(
+            organization_id=jd.organization_id,
             resume_id=resume_id,
             job_description_id=job_description_id,
             status=AnalysisStatus.PENDING,

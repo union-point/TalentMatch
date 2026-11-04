@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.application.dto.ai import FastTrackResultData
 from app.application.services.fast_track_service import FastTrackService
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 
 
 async def test_concurrent_ai_serial_database_and_savepoint_recovery():
@@ -66,7 +67,9 @@ async def test_concurrent_ai_serial_database_and_savepoint_recovery():
             return entity
 
         jd = AsyncMock()
-        jd.get_by_id.return_value = SimpleNamespace(normalized_content="Job")
+        jd.get_by_id.return_value = SimpleNamespace(
+            normalized_content="Job", organization_id=TEST_ORG_ID
+        )
         resumes = AsyncMock()
         resumes.get_by_id.side_effect = read
         results = AsyncMock()

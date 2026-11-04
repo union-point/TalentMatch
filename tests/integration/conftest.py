@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from app.config import settings
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.infrastructure.persistence.models.base import Base
 from tests.integration.database import validate_test_database_url
 
@@ -29,6 +30,10 @@ async def engine() -> AsyncGenerator[AsyncEngine, None]:
         async with eng.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
             await conn.run_sync(Base.metadata.create_all)
+        from app.infrastructure.persistence.models.identity import OrganizationModel
+
+        async with AsyncSession(eng) as seed, seed.begin():
+            seed.add(OrganizationModel(id=TEST_ORG_ID, name="Test organization", locked=False))
         try:
             yield eng
         finally:
@@ -73,10 +78,10 @@ async def real_client(engine, temp_upload_dir) -> AsyncGenerator[AsyncClient, No
 
     async def override_get_ingestion_service():
         async with session_factory() as session:
-            jd_repo = SQLAlchemyJobDescriptionRepository(session)
-            resume_repo = SQLAlchemyResumeRepository(session)
+            jd_repo = SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID)
+            resume_repo = SQLAlchemyResumeRepository(session, organization_id=TEST_ORG_ID)
             file_storage = LocalFileStorage(base_dir=temp_upload_dir)
-            yield IngestionService(jd_repo, resume_repo, file_storage, session.begin)
+            yield IngestionService(jd_repo, resume_repo, file_storage, TEST_ORG_ID, session.begin)
             await session.commit()
 
     app.dependency_overrides[get_db] = override_get_db

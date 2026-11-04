@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, String, Text
+from sqlalchemy import Boolean, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -17,6 +18,10 @@ if TYPE_CHECKING:
 
 class ResumeModel(Base, UUIDMixin):
     __tablename__ = "resumes"
+    __table_args__ = (UniqueConstraint("id", "organization_id", name="uq_resume_organization"),)
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("organizations.id"), nullable=False, index=True
+    )
 
     filename: Mapped[str] = mapped_column(String(255), nullable=False)
     candidate_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -29,8 +34,12 @@ class ResumeModel(Base, UUIDMixin):
     injection_scan_details: Mapped[dict[str, object] | None] = mapped_column(JSONB, nullable=True)
 
     fast_track_results: Mapped[list[FastTrackResultModel]] = relationship(
-        back_populates="resume", cascade="all, delete-orphan"
+        overlaps="fast_track_results,deep_analyses",
+        back_populates="resume",
+        cascade="all, delete-orphan",
     )
     deep_analyses: Mapped[list[DeepAnalysisModel]] = relationship(
-        back_populates="resume", cascade="all, delete-orphan"
+        overlaps="fast_track_results,deep_analyses",
+        back_populates="resume",
+        cascade="all, delete-orphan",
     )

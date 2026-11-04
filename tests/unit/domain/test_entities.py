@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.entities.fast_track_result import FastTrackResult
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
@@ -11,6 +12,7 @@ from app.domain.value_objects import AnalysisStatus
 class TestJobDescription:
     def test_create_with_minimal_fields(self) -> None:
         jd = JobDescription(
+            organization_id=TEST_ORG_ID,
             title="Software Engineer",
             company="Acme Inc",
             original_content="We need a software engineer...",
@@ -29,6 +31,7 @@ class TestJobDescription:
         now = datetime.now(timezone.utc)
         jd_id = uuid.uuid4()
         jd = JobDescription(
+            organization_id=TEST_ORG_ID,
             id=jd_id,
             title="Data Scientist",
             company="Corp",
@@ -49,6 +52,7 @@ class TestJobDescription:
 class TestResume:
     def test_create_with_minimal_fields(self) -> None:
         r = Resume(
+            organization_id=TEST_ORG_ID,
             filename="resume.pdf",
             original_content="John Doe experience...",
             normalized_content="John Doe experience...",
@@ -63,6 +67,7 @@ class TestResume:
 
     def test_create_with_all_fields(self) -> None:
         r = Resume(
+            organization_id=TEST_ORG_ID,
             filename="cv.docx",
             candidate_name="Jane Doe",
             email="jane@example.com",
@@ -83,6 +88,7 @@ class TestFastTrackResult:
         resume_id = uuid.uuid4()
         jd_id = uuid.uuid4()
         r = FastTrackResult(
+            organization_id=TEST_ORG_ID,
             resume_id=resume_id,
             job_description_id=jd_id,
             pass_fail=True,
@@ -100,6 +106,7 @@ class TestFastTrackResult:
 
     def test_create_without_raw_response(self) -> None:
         r = FastTrackResult(
+            organization_id=TEST_ORG_ID,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
             pass_fail=False,
@@ -112,6 +119,7 @@ class TestFastTrackResult:
 class TestDeepAnalysis:
     def test_create_with_default_status(self) -> None:
         da = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
         )
@@ -120,6 +128,7 @@ class TestDeepAnalysis:
 
     def test_create_with_full_data(self) -> None:
         da = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
             status=AnalysisStatus.COMPLETED,
@@ -141,6 +150,7 @@ class TestDeepAnalysis:
 
     def test_failed_analysis(self) -> None:
         da = DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             resume_id=uuid.uuid4(),
             job_description_id=uuid.uuid4(),
             status=AnalysisStatus.FAILED,

@@ -10,6 +10,7 @@ from httpx import ASGITransport, AsyncClient
 from app.application.services.fast_track_service import FastTrackService
 from app.core.exceptions import AIResponseError, ParsingError
 from app.domain.entities.deep_analysis import DeepAnalysis
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.resume import Resume
 from app.domain.value_objects import AnalysisStatus
 from app.main import app
@@ -63,7 +64,9 @@ async def test_validation_errors_do_not_echo_input() -> None:
 @pytest.mark.parametrize("stage", ["database", "provider"])
 async def test_per_resume_failures_do_not_echo_internal_errors(stage: str) -> None:
     jobs, resumes, results, ai = AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock()
-    jobs.get_by_id.return_value = SimpleNamespace(normalized_content="Job")
+    jobs.get_by_id.return_value = SimpleNamespace(
+        normalized_content="Job", organization_id=TEST_ORG_ID
+    )
     resumes.get_by_id.return_value = SimpleNamespace(
         normalized_content="Resume", injection_scan_passed=True
     )
@@ -88,6 +91,7 @@ async def test_dashboard_redacts_legacy_persisted_error_text() -> None:
     service = AsyncMock()
     service.get_candidate_detail.return_value = SimpleNamespace(
         resume=Resume(
+            organization_id=TEST_ORG_ID,
             id=resume_id,
             filename="resume.pdf",
             file_path="resume.pdf",
@@ -98,6 +102,7 @@ async def test_dashboard_redacts_legacy_persisted_error_text() -> None:
         ),
         fast_track=None,
         deep_analysis=DeepAnalysis(
+            organization_id=TEST_ORG_ID,
             resume_id=resume_id,
             job_description_id=jd_id,
             status=AnalysisStatus.FAILED,

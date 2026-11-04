@@ -5,6 +5,7 @@ from datetime import datetime
 
 @dataclass
 class FastTrackResult:
+    organization_id: uuid.UUID = field(kw_only=True)
     resume_id: uuid.UUID
     job_description_id: uuid.UUID
     pass_fail: bool

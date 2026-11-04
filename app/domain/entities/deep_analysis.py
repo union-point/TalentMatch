@@ -7,6 +7,7 @@ from app.domain.value_objects import AnalysisStatus
 
 @dataclass
 class DeepAnalysis:
+    organization_id: uuid.UUID = field(kw_only=True)
     resume_id: uuid.UUID
     job_description_id: uuid.UUID
     status: AnalysisStatus = AnalysisStatus.PENDING

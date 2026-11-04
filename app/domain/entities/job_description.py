@@ -5,6 +5,7 @@ from datetime import datetime
 
 @dataclass
 class JobDescription:
+    organization_id: uuid.UUID = field(kw_only=True)
     title: str
     company: str
     original_content: str

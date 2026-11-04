@@ -2,11 +2,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 
-from sqlalchemy import JSON, MetaData
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON, MetaData, Uuid
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.application.services.dashboard_service import DashboardService
+from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.entities.resume import Resume
 from app.infrastructure.persistence.models import Base
 from app.infrastructure.persistence.models.fast_track_result import FastTrackResultModel
@@ -22,6 +23,8 @@ async def test_latest_result_drives_ranking_filters_and_detail() -> None:
     for table in Base.metadata.sorted_tables:
         copied = table.to_metadata(metadata)
         for column in copied.columns:
+            if isinstance(column.type, UUID):
+                column.type = Uuid(native_uuid=False)
             if isinstance(column.type, JSONB):
                 column.type = JSON()
     try:
@@ -38,6 +41,7 @@ async def test_latest_result_drives_ranking_filters_and_detail() -> None:
             ]:
                 session.add(
                     FastTrackResultModel(
+                        organization_id=TEST_ORG_ID,
                         id=uuid.UUID(int=15 * 2**124 + number),
                         resume_id=resume_id,
                         job_description_id=job,
@@ -49,6 +53,7 @@ async def test_latest_result_drives_ranking_filters_and_detail() -> None:
                 )
             session.add(
                 ResumeModel(
+                    organization_id=TEST_ORG_ID,
                     id=resume_id,
                     filename="resume.pdf",
                     file_path="resume.pdf",
@@ -59,7 +64,7 @@ async def test_latest_result_drives_ranking_filters_and_detail() -> None:
                 )
             )
             await session.flush()
-            repo = SQLAlchemyFastTrackRepository(session)
+            repo = SQLAlchemyFastTrackRepository(session, organization_id=TEST_ORG_ID)
             results = await repo.get_by_job_description_id(jd_id)
             assert [result.score for result in results] == [40]
             assert await repo.get_by_id(uuid.UUID(int=15 * 2**124 + 1)) is not None
@@ -67,6 +72,7 @@ async def test_latest_result_drives_ranking_filters_and_detail() -> None:
 
             resumes, jobs, deep = AsyncMock(), AsyncMock(), AsyncMock()
             resumes.get_by_id.return_value = Resume(
+                organization_id=TEST_ORG_ID,
                 id=resume_id,
                 filename="resume.pdf",
                 file_path="resume.pdf",
@@ -98,6 +104,8 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
     for table in Base.metadata.sorted_tables:
         copied = table.to_metadata(metadata)
         for column in copied.columns:
+            if isinstance(column.type, UUID):
+                column.type = Uuid(native_uuid=False)
             if isinstance(column.type, JSONB):
                 column.type = JSON()
     try:
@@ -109,6 +117,7 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                 rid = uuid.uuid4()
                 session.add(
                     ResumeModel(
+                        organization_id=TEST_ORG_ID,
                         id=rid,
                         filename="test.txt",
                         file_path="test.txt",
@@ -121,6 +130,7 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                 )
                 session.add(
                     FastTrackResultModel(
+                        organization_id=TEST_ORG_ID,
                         resume_id=rid,
                         job_description_id=jd_id,
                         score=i,
@@ -131,6 +141,7 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                 if i == 99:
                     session.add(
                         DeepAnalysisModel(
+                            organization_id=TEST_ORG_ID,
                             resume_id=rid,
                             job_description_id=jd_id,
                             status="pending",
@@ -143,7 +154,7 @@ async def test_pagination_filters_and_projection_use_two_queries() -> None:
                 statements.append(statement)
 
             event.listen(engine.sync_engine, "before_cursor_execute", record)
-            repo = SQLAlchemyFastTrackRepository(session)
+            repo = SQLAlchemyFastTrackRepository(session, organization_id=TEST_ORG_ID)
             items, total = await repo.get_ranked_candidates(jd_id, page_size=20)
             assert total == 100
             assert len(items) == 20
