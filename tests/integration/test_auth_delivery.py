@@ -8,7 +8,7 @@ import pytest
 from cryptography.fernet import Fernet
 from redis.asyncio import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from app.application.services.auth_sessions import AuthError
 from app.config import settings
@@ -22,8 +22,8 @@ pytestmark = [pytest.mark.integration, pytest.mark.real_auth]
 
 @pytest.mark.parametrize("expired", [False, True])
 async def test_email_outbox_delivery_erases_payload_and_concurrent_sweeps_do_not_duplicate(
-    engine, monkeypatch, expired
-):
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch, expired: bool
+) -> None:
     from app.tasks import auth_tasks
 
     key = Fernet.generate_key().decode()
@@ -57,7 +57,9 @@ async def test_email_outbox_delivery_erases_payload_and_concurrent_sweeps_do_not
         assert row.encrypted_payload is None
 
 
-async def test_email_outbox_retries_then_erases_failed_secrets(engine, monkeypatch, caplog):
+async def test_email_outbox_retries_then_erases_failed_secrets(
+    engine: AsyncEngine, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
     from app.tasks import auth_tasks
 
     key = Fernet.generate_key().decode()
@@ -98,7 +100,7 @@ async def test_email_outbox_retries_then_erases_failed_secrets(engine, monkeypat
     assert "TOP-SECRET-TOKEN" not in caplog.text
 
 
-async def test_real_redis_auth_limits_are_shared_and_fail_closed():
+async def test_real_redis_auth_limits_are_shared_and_fail_closed() -> None:
     redis = Redis.from_url(settings.redis_url, decode_responses=True, socket_connect_timeout=2)
     operation = "test:" + uuid4().hex
     limiter = AuthThrottle(redis)

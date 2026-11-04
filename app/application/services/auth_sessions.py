@@ -137,9 +137,12 @@ class SessionService:
                 raise AuthError(
                     "csrf_failed", "Request verification failed. Reload and try again.", 403
                 )
+            # Lock the user before touching session rows, matching credential-change lock order.
+            context = await self.context(repo, session)
             session.last_seen_at = now
-            await repo.save_session(session)
-            return await self.context(repo, session)
+            if not await repo.touch_session(session):
+                raise AuthError("session_expired", "Your session expired. Please sign in.", 401)
+            return context
 
     async def logout(self, context: AuthContext, all_sessions: bool = False) -> None:
         async with self._transaction() as repo:

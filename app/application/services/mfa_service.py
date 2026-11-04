@@ -23,6 +23,11 @@ class MfaService:
         self._auth = auth
         self._sessions = sessions
 
+    async def _require_live_session(self, repo: IdentityRepository, context: AuthContext) -> None:
+        session = await repo.session(context.session.token_hash)
+        if session is None or session.id != context.session.id or session.expires_at <= utcnow():
+            raise AuthError("session_expired", "Your session expired. Please sign in.", 401)
+
     async def verify_factor(self, repo: IdentityRepository, user_id: UUID, code: str) -> None:
         credential = await repo.mfa(user_id)
         if credential is None or credential.encrypted_secret is None:
@@ -44,6 +49,7 @@ class MfaService:
             raise AuthError("invalid_state", "No MFA challenge is pending.", 403)
         async with self._transaction() as repo:
             await repo.user(user.id)  # serialize credential/recovery changes for this user
+            await self._require_live_session(repo, context)
             await self.verify_factor(repo, user.id, code)
             membership = await repo.membership(user.id)
             if membership and membership.role == "owner":
@@ -58,6 +64,7 @@ class MfaService:
             raise AuthError("invalid_state", "Complete email verification and sign-in first.", 403)
         async with self._transaction() as repo:
             user = await self._auth.check_password(repo, context, password)
+            await self._require_live_session(repo, context)
             if user.verified_at is None:
                 raise AuthError("email_verification_required", "Verify your email first.", 403)
             credential = await repo.mfa(user.id) or MfaCredential(user.id)
@@ -84,6 +91,7 @@ class MfaService:
             raise AuthError("invalid_state", "Complete sign-in first.", 403)
         async with self._transaction() as repo:
             await repo.user(user.id)
+            await self._require_live_session(repo, context)
             credential = await repo.mfa(user.id)
             if (
                 credential is None
@@ -120,6 +128,7 @@ class MfaService:
             raise AuthError("invalid_state", "Complete sign-in first.", 403)
         async with self._transaction() as repo:
             user = await self._auth.check_password(repo, context, password)
+            await self._require_live_session(repo, context)
             membership = await repo.membership(user.id)
             if disable and membership and membership.role == "owner":
                 raise AuthError(

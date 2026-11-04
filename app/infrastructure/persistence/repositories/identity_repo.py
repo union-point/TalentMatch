@@ -104,15 +104,26 @@ class SQLAlchemyIdentityRepository:
         return _record(
             AuthSession,
             await self._session.scalar(
-                select(AuthSessionModel)
-                .where(AuthSessionModel.token_hash == token_hash)
-                .with_for_update()
+                select(AuthSessionModel).where(AuthSessionModel.token_hash == token_hash)
             ),
         )
 
     async def save_session(self, session: AuthSession) -> None:
         await self._session.merge(AuthSessionModel(**asdict(session)))
         await self._session.flush()
+
+    async def touch_session(self, session: AuthSession) -> bool:
+        # Never merge an existing session: merge could recreate a concurrently revoked row.
+        identifier = await self._session.scalar(
+            update(AuthSessionModel)
+            .where(
+                AuthSessionModel.id == session.id,
+                AuthSessionModel.token_hash == session.token_hash,
+            )
+            .values(last_seen_at=session.last_seen_at)
+            .returning(AuthSessionModel.id)
+        )
+        return identifier is not None
 
     async def delete_session(self, session_id: UUID) -> None:
         await self._session.execute(
@@ -124,17 +135,20 @@ class SQLAlchemyIdentityRepository:
             delete(AuthSessionModel).where(AuthSessionModel.user_id == user_id)
         )
 
-    async def token(self, token_hash: str, purpose: str) -> ActionToken | None:
-        return _record(
-            ActionToken,
-            await self._session.scalar(
-                select(ActionTokenModel)
-                .where(
-                    ActionTokenModel.token_hash == token_hash, ActionTokenModel.purpose == purpose
-                )
-                .with_for_update()
-            ),
+    async def token(
+        self, token_hash: str, purpose: str, *, lock: bool = True
+    ) -> ActionToken | None:
+        query = (
+            select(ActionTokenModel)
+            .where(
+                ActionTokenModel.token_hash == token_hash,
+                ActionTokenModel.purpose == purpose,
+            )
+            .execution_options(populate_existing=True)
         )
+        if lock:
+            query = query.with_for_update()
+        return _record(ActionToken, await self._session.scalar(query))
 
     async def token_by_id(self, token_id: UUID) -> ActionToken | None:
         return _record(
@@ -225,4 +239,6 @@ class SQLAlchemyIdentityTransaction:
             async with self._factory() as session, session.begin():
                 yield SQLAlchemyIdentityRepository(session)
         except IntegrityError as exc:
-            raise IdentityConflictError("An identity record already exists") from exc
+            if getattr(exc.orig, "sqlstate", None) == "23505":
+                raise IdentityConflictError("An identity record already exists") from exc
+            raise

@@ -101,6 +101,15 @@ class AuthService:
             )
 
     async def valid_token(self, repo: IdentityRepository, raw: str, purpose: str) -> ActionToken:
+        # Take user/organization locks before token locks to match resend and invitation writes.
+        peek = await repo.token(self._secrets.digest(raw), purpose, lock=False)
+        if peek:
+            if purpose == "invite":
+                await repo.user_by_email(peek.email)
+            elif peek.user_id:
+                await repo.user(peek.user_id)
+            if peek.organization_id:
+                await repo.organization(peek.organization_id)
         token = await repo.token(self._secrets.digest(raw), purpose)
         if token is None or token.consumed_at is not None or token.expires_at <= utcnow():
             raise AuthError("invalid_token", "This link is invalid or expired.")
@@ -141,13 +150,12 @@ class AuthService:
             )
 
     async def reset_password(self, raw: str, password: str) -> None:
-        hashed = await self._passwords.hash(password)
         async with self._transaction() as repo:
             token = await self.valid_token(repo, raw, "reset")
             user = await repo.user(token.user_id) if token.user_id else None
             if user is None:
                 raise AuthError("invalid_token", "This link is invalid or expired.")
-            user.password_hash = hashed
+            user.password_hash = await self._passwords.hash(password)
             await repo.save_user(user)
             await repo.invalidate_tokens(user.id, "reset")
             await repo.revoke_sessions(user.id)

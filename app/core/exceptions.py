@@ -85,6 +85,8 @@ def public_error_message(exc: Exception) -> str:
         ),
     ):
         return str(exc)
+    if isinstance(exc, IdentityConflictError):
+        return "This account is already in use or belongs to an organization."
     if isinstance(exc, ParsingError):
         return "Could not parse the uploaded document."
     if isinstance(exc, FileNotFoundError):

@@ -100,10 +100,13 @@ async def login(
 @router.post("/verify-email")
 async def verify_email(
     body: TokenBody,
+    request: Request,
     context: AuthContext = Depends(get_auth_context),
     services: AuthServices = Depends(get_auth_services),
 ) -> dict[str, str]:
+    keys = await reserve(services, request, "verify:" + body.token)
     await services.auth.verify_email(body.token)
+    await services.throttle.release(keys)
     return {"detail": "Email verified. Sign in to continue."}
 
 
@@ -134,21 +137,27 @@ async def forgot(
 @router.post("/reset-password")
 async def reset(
     body: ResetBody,
+    request: Request,
     context: AuthContext = Depends(get_auth_context),
     services: AuthServices = Depends(get_auth_services),
 ) -> dict[str, str]:
+    keys = await reserve(services, request, "reset:" + body.token)
     await services.auth.reset_password(body.token, body.password)
+    await services.throttle.release(keys)
     return {"detail": "Password reset. Sign in to continue."}
 
 
 @router.post("/change-password")
 async def change_password(
     body: ChangePasswordBody,
+    request: Request,
     response: Response,
     context: AuthContext = Depends(get_auth_context),
     services: AuthServices = Depends(get_auth_services),
 ) -> dict[str, object]:
+    keys = await reserve(services, request, str(context.session.user_id) + ":password")
     context = await services.auth.change_password(context, body.password, body.new_password)
+    await services.throttle.release(keys)
     set_auth_cookie(response, context)
     return session_view(context)
 

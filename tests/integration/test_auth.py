@@ -1,7 +1,10 @@
 """Authentication tests use real PostgreSQL and real cryptography, without identity overrides."""
 
 import json
+from collections.abc import AsyncIterator
 from datetime import timedelta
+from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock
 from urllib.parse import parse_qs, urlsplit
 
@@ -9,9 +12,9 @@ import pyotp
 import pytest
 import pytest_asyncio
 from cryptography.fernet import Fernet
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, Response
 from sqlalchemy import func, select, update
-from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from app.application.dto.auth import AuthPolicy
 from app.application.services.auth_service import AuthService
@@ -37,11 +40,15 @@ from app.main import app
 from app.presentation.api.middleware import _request_history
 
 pytestmark = [pytest.mark.integration, pytest.mark.real_auth]
+AuthEnv = tuple[
+    AsyncClient, async_sessionmaker[AsyncSession], EncryptedIdentitySecrets, AuthServices
+]
+
 PASSWORD = "a very long test password with spaces"
 
 
 @pytest_asyncio.fixture
-async def auth_env(engine, monkeypatch):
+async def auth_env(engine: AsyncEngine) -> AsyncIterator[AuthEnv]:
     factory = async_sessionmaker(engine, expire_on_commit=False)
     crypto = EncryptedIdentitySecrets([Fernet.generate_key().decode()])
     transaction = SQLAlchemyIdentityTransaction(factory)
@@ -59,7 +66,7 @@ async def auth_env(engine, monkeypatch):
         throttle,
     )
 
-    async def override_db():
+    async def override_db() -> AsyncIterator[AsyncSession]:
         async with factory() as session:
             yield session
             await session.commit()
@@ -74,7 +81,9 @@ async def auth_env(engine, monkeypatch):
     _request_history.clear()
 
 
-async def post(client, path, body=None, method="POST"):
+async def post(
+    client: AsyncClient, path: str, body: dict[str, Any] | None = None, method: str = "POST"
+) -> Response:
     bootstrap = await client.get("/api/v1/auth/session")
     assert bootstrap.status_code == 200, bootstrap.text
     return await client.request(
@@ -85,7 +94,12 @@ async def post(client, path, body=None, method="POST"):
     )
 
 
-async def email_token(factory, crypto, email, purpose):
+async def email_token(
+    factory: async_sessionmaker[AsyncSession],
+    crypto: EncryptedIdentitySecrets,
+    email: str,
+    purpose: str,
+) -> str:
     async with factory() as session:
         rows = (
             await session.scalars(
@@ -101,7 +115,12 @@ async def email_token(factory, crypto, email, purpose):
     raise AssertionError("Expected queued email")
 
 
-async def owner(client, factory, crypto, email="owner@example.com"):
+async def owner(
+    client: AsyncClient,
+    factory: async_sessionmaker[AsyncSession],
+    crypto: EncryptedIdentitySecrets,
+    email: str = "owner@example.com",
+) -> dict[str, Any]:
     response = await post(
         client,
         "auth/register",
@@ -116,7 +135,9 @@ async def owner(client, factory, crypto, email="owner@example.com"):
     return response.json()
 
 
-async def enroll(client, factory, crypto):
+async def enroll(
+    client: AsyncClient, factory: async_sessionmaker[AsyncSession], crypto: EncryptedIdentitySecrets
+) -> tuple[str, list[str]]:
     response = await post(client, "auth/mfa/enroll", {"password": PASSWORD})
     assert response.status_code == 200, response.text
     secret = parse_qs(urlsplit(response.json()["uri"]).query)["secret"][0]
@@ -125,7 +146,7 @@ async def enroll(client, factory, crypto):
     return secret, response.json()["recovery_codes"]
 
 
-async def test_owner_signup_verification_mfa_csrf_and_logout(auth_env):
+async def test_owner_signup_verification_mfa_csrf_and_logout(auth_env: AuthEnv) -> None:
     client, factory, crypto, _ = auth_env
     denied = await client.get("/api/v1/job-descriptions")
     assert denied.status_code == 401
@@ -152,7 +173,7 @@ async def test_owner_signup_verification_mfa_csrf_and_logout(auth_env):
     assert (await client.get("/api/v1/job-descriptions")).status_code == 401
 
 
-async def test_duplicate_signup_tokens_and_generic_email_requests(auth_env):
+async def test_duplicate_signup_tokens_and_generic_email_requests(auth_env: AuthEnv) -> None:
     client, factory, crypto, _ = auth_env
     body = {"email": "OWNER@EXAMPLE.COM", "password": PASSWORD, "organization_name": "First"}
     first = await post(client, "auth/register", body)
@@ -180,7 +201,7 @@ async def test_duplicate_signup_tokens_and_generic_email_requests(auth_env):
     ).status_code == 400
 
 
-async def test_mfa_replay_recovery_and_password_reset_preserves_factor(auth_env):
+async def test_mfa_replay_recovery_and_password_reset_preserves_factor(auth_env: AuthEnv) -> None:
     client, factory, crypto, _ = auth_env
     await owner(client, factory, crypto)
     secret, codes = await enroll(client, factory, crypto)
@@ -208,11 +229,10 @@ async def test_mfa_replay_recovery_and_password_reset_preserves_factor(auth_env)
     assert (await post(client, "auth/mfa/challenge", {"code": codes[2]})).status_code == 200
 
 
-async def test_invited_member_permissions_revocation_and_optional_mfa(auth_env):
+async def test_invited_member_permissions_revocation_and_optional_mfa(auth_env: AuthEnv) -> None:
     client, factory, crypto, _ = auth_env
     await owner(client, factory, crypto)
     _, owner_codes = await enroll(client, factory, crypto)
-    owner_cookie = client.cookies.get(settings.auth_cookie_name)
     assert (
         await post(client, "organization/invitations", {"email": "member@example.com"})
     ).status_code == 202
@@ -234,23 +254,26 @@ async def test_invited_member_permissions_revocation_and_optional_mfa(auth_env):
     _, codes = await enroll(client, factory, crypto)
     disable = await post(client, "auth/mfa/disable", {"password": PASSWORD, "code": codes[0]})
     assert disable.status_code == 200 and not disable.json()["mfa_enabled"]
-    member_cookie = client.cookies.get(settings.auth_cookie_name)
-    await post(client, "auth/logout")
-    await post(client, "auth/login", {"email": "owner@example.com", "password": PASSWORD})
-    await post(client, "auth/mfa/challenge", {"code": owner_codes[0]})
-    assert (
-        await post(client, f"organization/members/{member_id}", method="DELETE")
-    ).status_code == 204
-    owner_id = (await client.get("/api/v1/auth/session")).json()["user"]["id"]
-    assert (
-        await post(client, f"organization/members/{owner_id}", method="DELETE")
-    ).status_code == 403
-    client.cookies.set(settings.auth_cookie_name, member_cookie, domain="test.local", path="/")
+    # Keep the member's cookie alive in a separate client while the owner removes them.
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as owner_client:
+        await post(owner_client, "auth/login", {"email": "owner@example.com", "password": PASSWORD})
+        await post(owner_client, "auth/mfa/challenge", {"code": owner_codes[0]})
+        assert (await client.get("/api/v1/job-descriptions")).status_code == 200
+        assert (
+            await post(owner_client, f"organization/members/{member_id}", method="DELETE")
+        ).status_code == 204
+        owner_id = (await owner_client.get("/api/v1/auth/session")).json()["user"]["id"]
+        assert (
+            await post(owner_client, f"organization/members/{owner_id}", method="DELETE")
+        ).status_code == 403
     assert (await client.get("/api/v1/job-descriptions")).status_code == 401
-    assert owner_cookie is not None
 
 
-async def test_session_expiration_and_cookie_attributes(auth_env, monkeypatch):
+async def test_session_expiration_and_cookie_attributes(
+    auth_env: AuthEnv, monkeypatch: pytest.MonkeyPatch
+) -> None:
     client, factory, crypto, services = auth_env
     response = await client.get("/api/v1/auth/session")
     cookie = response.headers["set-cookie"]
@@ -277,7 +300,7 @@ async def test_session_expiration_and_cookie_attributes(auth_env, monkeypatch):
     assert "; Secure" in production_response.headers["set-cookie"]
 
 
-async def test_origin_csrf_rejection_and_auth_throttle_failure(auth_env):
+async def test_origin_csrf_rejection_and_auth_throttle_failure(auth_env: AuthEnv) -> None:
     client, _, _, services = auth_env
     csrf = (await client.get("/api/v1/auth/session")).json()["csrf_token"]
     body = {"email": "person@example.com", "password": PASSWORD}
@@ -295,8 +318,8 @@ async def test_origin_csrf_rejection_and_auth_throttle_failure(auth_env):
 
 
 async def test_every_hiring_endpoint_is_scoped_and_cross_org_analysis_has_no_side_effects(
-    auth_env, tmp_path, monkeypatch
-):
+    auth_env: AuthEnv, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from unittest.mock import AsyncMock, patch
     from uuid import UUID, uuid4
 
@@ -425,8 +448,8 @@ async def test_every_hiring_endpoint_is_scoped_and_cross_org_analysis_has_no_sid
 
 
 async def test_protected_upload_transactions_and_denied_upload_cleanup(
-    auth_env, tmp_path, monkeypatch
-):
+    auth_env: AuthEnv, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     from unittest.mock import AsyncMock, patch
 
     from app.infrastructure.storage.local_file_storage import get_local_file_storage
@@ -459,7 +482,7 @@ async def test_protected_upload_transactions_and_denied_upload_cleanup(
     get_local_file_storage.cache_clear()
 
 
-async def test_mfa_concurrent_recovery_and_authenticator_replacement(auth_env):
+async def test_mfa_concurrent_recovery_and_authenticator_replacement(auth_env: AuthEnv) -> None:
     import asyncio
 
     from app.application.services.auth_sessions import AuthError
@@ -487,7 +510,7 @@ async def test_mfa_concurrent_recovery_and_authenticator_replacement(auth_env):
         assert hashes == {crypto.digest(code) for code in replacement_codes}
 
 
-async def test_legacy_owner_invitation_requires_mfa_before_unlocking(auth_env):
+async def test_legacy_owner_invitation_requires_mfa_before_unlocking(auth_env: AuthEnv) -> None:
     from app.application.services.auth_sessions import AuthError
     from app.domain.entities.identity import LEGACY_ORGANIZATION_ID
 
@@ -508,3 +531,136 @@ async def test_legacy_owner_invitation_requires_mfa_before_unlocking(auth_env):
     assert (await client.get("/api/v1/job-descriptions")).status_code == 200
     with pytest.raises(AuthError):
         await services.organizations.invite_legacy_owner("replacement@example.com")
+
+
+async def test_concurrent_signup_and_verification_resend_are_atomic(auth_env: AuthEnv) -> None:
+    import asyncio
+
+    from app.application.services.auth_sessions import AuthError
+
+    _, factory, crypto, services = auth_env
+    results = await asyncio.gather(
+        services.auth.register("concurrent@example.com", PASSWORD, "First"),
+        services.auth.register("concurrent@example.com", PASSWORD, "Second"),
+        return_exceptions=True,
+    )
+    assert results == [None, None]
+    async with factory() as db:
+        assert await db.scalar(select(func.count()).select_from(UserModel)) == 1
+    token = await email_token(factory, crypto, "concurrent@example.com", "verify-email")
+    results = await asyncio.gather(
+        services.auth.verify_email(token),
+        services.auth.request_email("concurrent@example.com", "verify"),
+        return_exceptions=True,
+    )
+    assert all(result is None or isinstance(result, AuthError) for result in results)
+    async with factory() as db:
+        assert await db.scalar(select(func.count()).select_from(MembershipModel)) <= 1
+
+
+async def test_password_reset_revokes_inflight_mfa_challenges(auth_env: AuthEnv) -> None:
+    from app.application.services.auth_sessions import AuthError
+
+    client, factory, crypto, services = auth_env
+    await owner(client, factory, crypto)
+    _, codes = await enroll(client, factory, crypto)
+    await post(client, "auth/logout")
+    await post(client, "auth/login", {"email": "owner@example.com", "password": PASSWORD})
+    challenge = await services.sessions.resolve(client.cookies.get(settings.auth_cookie_name))
+    await services.auth.request_email("owner@example.com", "reset")
+    reset = await email_token(factory, crypto, "owner@example.com", "reset-password")
+    await services.auth.reset_password(reset, PASSWORD + "new")
+    with pytest.raises(AuthError) as expired:
+        await services.mfa.challenge(challenge, codes[0])
+    assert expired.value.status == 401
+    async with factory() as db:
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(AuthSessionModel)
+                .where(AuthSessionModel.user_id == challenge.user.id)
+            )
+            == 0
+        )
+
+
+async def test_revoked_session_cannot_be_resurrected_by_a_concurrent_read(
+    auth_env: AuthEnv,
+) -> None:
+    import asyncio
+    from unittest.mock import patch
+
+    from app.application.services.auth_sessions import AuthError
+    from app.domain.entities.identity import AuthSession
+    from app.infrastructure.persistence.repositories.identity_repo import (
+        SQLAlchemyIdentityRepository,
+    )
+
+    client, factory, crypto, services = auth_env
+    await owner(client, factory, crypto)
+    await enroll(client, factory, crypto)
+    raw = client.cookies.get(settings.auth_cookie_name)
+    context = await services.sessions.resolve(raw)
+    read, resume = asyncio.Event(), asyncio.Event()
+    original = SQLAlchemyIdentityRepository.session
+
+    async def delayed(
+        repository: SQLAlchemyIdentityRepository, token_hash: str
+    ) -> AuthSession | None:
+        session = await original(repository, token_hash)
+        read.set()
+        await resume.wait()
+        return session
+
+    with patch.object(SQLAlchemyIdentityRepository, "session", delayed):
+        pending = asyncio.create_task(services.sessions.resolve(raw))
+        await read.wait()
+        await services.sessions.logout(context)
+        resume.set()
+        with pytest.raises(AuthError) as expired:
+            await pending
+        assert expired.value.status == 401
+    async with factory() as db:
+        assert (
+            await db.scalar(
+                select(func.count())
+                .select_from(AuthSessionModel)
+                .where(AuthSessionModel.user_id == context.user.id)
+            )
+            == 0
+        )
+
+
+async def test_logout_all_revokes_other_devices(auth_env: AuthEnv) -> None:
+    client, factory, crypto, _ = auth_env
+    await owner(client, factory, crypto)
+    _, codes = await enroll(client, factory, crypto)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as device:
+        await post(device, "auth/login", {"email": "owner@example.com", "password": PASSWORD})
+        await post(device, "auth/mfa/challenge", {"code": codes[0]})
+        assert (await device.get("/api/v1/job-descriptions")).status_code == 200
+        assert (await post(client, "auth/logout-all")).status_code == 204
+        assert (await device.get("/api/v1/job-descriptions")).status_code == 401
+        assert (await client.get("/api/v1/job-descriptions")).status_code == 401
+
+
+async def test_existing_members_cannot_join_another_org_and_revoked_invites_fail(
+    auth_env: AuthEnv,
+) -> None:
+    client, factory, crypto, _ = auth_env
+    await owner(client, factory, crypto)
+    await enroll(client, factory, crypto)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as other:
+        await owner(other, factory, crypto, "other@example.com")
+        await enroll(other, factory, crypto)
+        await post(client, "organization/invitations", {"email": "other@example.com"})
+        token = await email_token(factory, crypto, "other@example.com", "accept-invitation")
+        denied = await post(other, "auth/accept-invitation", {"token": token})
+        assert denied.status_code == 409
+        invitation = (await client.get("/api/v1/organization/invitations")).json()[0]
+        assert (
+            await post(client, "organization/invitations/" + invitation["id"], method="DELETE")
+        ).status_code == 204
+        assert (await post(other, "auth/accept-invitation", {"token": token})).status_code == 400
+    async with factory() as db:
+        assert await db.scalar(select(func.count()).select_from(MembershipModel)) == 2
