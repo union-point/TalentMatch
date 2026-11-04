@@ -38,7 +38,7 @@ export function Dashboard() {
         setSelectedJdId(result.id);
         setDialogOpen(false);
       } catch {
-        // Error handling via toast in M4
+        // The mutation error is rendered below.
       }
     },
     [uploadJd, queryClient]
@@ -50,7 +50,7 @@ export function Dashboard() {
         const result = await batchUpload.mutateAsync(files);
         setUploadResult(result);
       } catch {
-        // Error handling via toast in M4
+        // The mutation error is rendered below.
       }
     },
     [batchUpload]
@@ -78,6 +78,17 @@ export function Dashboard() {
           New JD
         </Button>
       </div>
+
+      {[uploadJd.error, batchUpload.error, fastTrack.error].filter(Boolean).map((error, index) => (
+        <p key={index} role="alert" className="text-sm text-destructive">
+          {error?.message}
+        </p>
+      ))}
+      {fastTrack.data?.results.filter((result) => result.error).map((result) => (
+        <p key={result.resume_id} role="alert" className="text-sm text-destructive">
+          {uploadResult?.resumes.find((resume) => resume.id === result.resume_id)?.filename ?? result.resume_id}: {result.error}
+        </p>
+      ))}
 
       <JdUploadDialog
         open={dialogOpen}
