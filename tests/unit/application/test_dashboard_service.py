@@ -152,249 +152,33 @@ def deep_analysis_1(resume_id_1: uuid.UUID, jd_id: uuid.UUID) -> DeepAnalysis:
 
 
 class TestGetRankedCandidates:
-    @pytest.mark.asyncio
-    async def test_returns_candidates_sorted_by_score_desc(
+    async def test_delegates_filters_and_pagination(
         self,
         service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
         mock_fast_track_repo: AsyncMock,
+        mock_resume_repo: AsyncMock,
         mock_deep_repo: AsyncMock,
         jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
     ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
+        mock_fast_track_repo.get_ranked_candidates.return_value = ([], 41)
+        result = await service.get_ranked_candidates(jd_id, 70, True, "Alice", 3, 20)
+        assert result.total == 41
+        assert result.pages == 3
+        mock_fast_track_repo.get_ranked_candidates.assert_awaited_once_with(
+            jd_id, 70, True, "Alice", 3, 20
         )
-        mock_deep_repo.get_by_resume_and_jd.return_value = None
+        mock_resume_repo.get_by_id.assert_not_awaited()
+        mock_deep_repo.get_by_resume_and_jd.assert_not_awaited()
 
-        result = await service.get_ranked_candidates(jd_id=jd_id)
-
-        assert result.total == 2
-        assert result.items[0].score == 85
-        assert result.items[1].score == 45
-        assert result.items[0].candidate_name == "Alice"
-        assert result.items[1].candidate_name == "Bob"
-
-    @pytest.mark.asyncio
-    async def test_raises_404_when_jd_not_found(
+    async def test_missing_job(
         self,
         service: DashboardService,
         mock_jd_repo: AsyncMock,
         jd_id: uuid.UUID,
     ) -> None:
         mock_jd_repo.get_by_id.return_value = None
-
         with pytest.raises(JobDescriptionNotFoundError):
-            await service.get_ranked_candidates(jd_id=jd_id)
-
-    @pytest.mark.asyncio
-    async def test_filters_by_min_score(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        mock_deep_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-        mock_deep_repo.get_by_resume_and_jd.return_value = None
-
-        result = await service.get_ranked_candidates(jd_id=jd_id, min_score=50)
-
-        assert result.total == 1
-        assert result.items[0].score == 85
-
-    @pytest.mark.asyncio
-    async def test_filters_by_pass_fail_only(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        mock_deep_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-        mock_deep_repo.get_by_resume_and_jd.return_value = None
-
-        result = await service.get_ranked_candidates(jd_id=jd_id, pass_fail_only=True)
-
-        assert result.total == 1
-        assert result.items[0].pass_fail is True
-
-    @pytest.mark.asyncio
-    async def test_filters_by_search_query(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        mock_deep_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-        mock_deep_repo.get_by_resume_and_jd.return_value = None
-
-        result = await service.get_ranked_candidates(jd_id=jd_id, search="alice")
-
-        assert result.total == 1
-        assert result.items[0].candidate_name == "Alice"
-
-    @pytest.mark.asyncio
-    async def test_pagination_returns_correct_subset(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        mock_deep_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-        mock_deep_repo.get_by_resume_and_jd.return_value = None
-
-        result_page_1 = await service.get_ranked_candidates(
-            jd_id=jd_id, page=1, page_size=1
-        )
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-        result_page_2 = await service.get_ranked_candidates(
-            jd_id=jd_id, page=2, page_size=1
-        )
-
-        assert result_page_1.total == 2
-        assert len(result_page_1.items) == 1
-        assert result_page_1.items[0].score == 85
-        assert result_page_2.total == 2
-        assert len(result_page_2.items) == 1
-        assert result_page_2.items[0].score == 45
-        assert result_page_1.pages == 2
-
-    @pytest.mark.asyncio
-    async def test_returns_empty_when_no_results(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        sample_jd: JobDescription,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = []
-
-        result = await service.get_ranked_candidates(jd_id=jd_id)
-
-        assert result.total == 0
-        assert result.items == []
-
-    @pytest.mark.asyncio
-    async def test_has_deep_analysis_flag(
-        self,
-        service: DashboardService,
-        mock_jd_repo: AsyncMock,
-        mock_resume_repo: AsyncMock,
-        mock_fast_track_repo: AsyncMock,
-        mock_deep_repo: AsyncMock,
-        jd_id: uuid.UUID,
-        resume_id_1: uuid.UUID,
-        resume_id_2: uuid.UUID,
-        sample_jd: JobDescription,
-        sample_resume_1: Resume,
-        sample_resume_2: Resume,
-        fast_track_1: FastTrackResult,
-        fast_track_2: FastTrackResult,
-        deep_analysis_1: DeepAnalysis,
-    ) -> None:
-        mock_jd_repo.get_by_id.return_value = sample_jd
-        mock_fast_track_repo.get_by_job_description_id.return_value = [
-            fast_track_1,
-            fast_track_2,
-        ]
-        mock_resume_repo.get_by_id.side_effect = _resume_map(
-            sample_resume_1, sample_resume_2
-        )
-
-        async def deep_side_effect(rid: uuid.UUID, jdid: uuid.UUID) -> DeepAnalysis | None:
-            if rid == resume_id_1:
-                return deep_analysis_1
-            return None
-
-        mock_deep_repo.get_by_resume_and_jd.side_effect = deep_side_effect
-
-        result = await service.get_ranked_candidates(jd_id=jd_id)
-
-        assert result.items[0].has_deep_analysis is True
-        assert result.items[1].has_deep_analysis is False
+            await service.get_ranked_candidates(jd_id)
 
 
 class TestGetCandidateDetail:
@@ -418,9 +202,7 @@ class TestGetCandidateDetail:
         mock_fast_track_repo.get_by_job_description_id.return_value = [fast_track_1]
         mock_deep_repo.get_by_resume_and_jd.return_value = deep_analysis_1
 
-        detail = await service.get_candidate_detail(
-            resume_id=resume_id_1, jd_id=jd_id
-        )
+        detail = await service.get_candidate_detail(resume_id=resume_id_1, jd_id=jd_id)
 
         assert detail.resume.id == resume_id_1
         assert detail.fast_track is not None
@@ -475,9 +257,7 @@ class TestGetCandidateDetail:
         mock_fast_track_repo.get_by_job_description_id.return_value = []
         mock_deep_repo.get_by_resume_and_jd.return_value = None
 
-        detail = await service.get_candidate_detail(
-            resume_id=resume_id_1, jd_id=jd_id
-        )
+        detail = await service.get_candidate_detail(resume_id=resume_id_1, jd_id=jd_id)
 
         assert detail.resume.id == resume_id_1
         assert detail.fast_track is None

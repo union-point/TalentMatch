@@ -4,8 +4,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.fast_track_result import FastTrackResult
+from app.domain.entities.ranked_candidate import RankedCandidateItem
 from app.domain.ports.repository import FastTrackRepository
+from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 from app.infrastructure.persistence.models.fast_track_result import FastTrackResultModel
+from app.infrastructure.persistence.models.resume import ResumeModel
 
 
 class SQLAlchemyFastTrackRepository(FastTrackRepository):
@@ -60,6 +63,85 @@ class SQLAlchemyFastTrackRepository(FastTrackRepository):
             .order_by(FastTrackResultModel.score.desc(), FastTrackResultModel.resume_id)
         )
         return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def get_ranked_candidates(
+        self,
+        jd_id: uuid.UUID,
+        min_score: int | None = None,
+        pass_fail_only: bool | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[RankedCandidateItem], int]:
+        latest = (
+            select(
+                FastTrackResultModel.id,
+                func.row_number()
+                .over(
+                    partition_by=FastTrackResultModel.resume_id,
+                    order_by=(
+                        FastTrackResultModel.created_at.desc(),
+                        FastTrackResultModel.id.desc(),
+                    ),
+                )
+                .label("position"),
+            )
+            .where(FastTrackResultModel.job_description_id == jd_id)
+            .subquery()
+        )
+        has_deep = (
+            select(DeepAnalysisModel.id)
+            .where(
+                DeepAnalysisModel.resume_id == ResumeModel.id,
+                DeepAnalysisModel.job_description_id == jd_id,
+            )
+            .exists()
+        )
+        query = (
+            select(
+                FastTrackResultModel.resume_id,
+                ResumeModel.candidate_name,
+                ResumeModel.email,
+                FastTrackResultModel.score,
+                FastTrackResultModel.pass_fail,
+                FastTrackResultModel.explanation,
+                ResumeModel.injection_scan_passed,
+                has_deep.label("has_deep_analysis"),
+                FastTrackResultModel.created_at,
+            )
+            .join(latest, latest.c.id == FastTrackResultModel.id)
+            .join(ResumeModel, ResumeModel.id == FastTrackResultModel.resume_id)
+            .where(latest.c.position == 1)
+        )
+        if min_score is not None:
+            query = query.where(FastTrackResultModel.score >= min_score)
+        if pass_fail_only:
+            query = query.where(FastTrackResultModel.pass_fail.is_(True))
+        if search:
+            query = query.where(
+                func.lower(ResumeModel.candidate_name).contains(search.lower(), autoescape=True)
+            )
+        total = await self._session.scalar(select(func.count()).select_from(query.subquery()))
+        rows = await self._session.execute(
+            query.order_by(FastTrackResultModel.score.desc(), FastTrackResultModel.resume_id)
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        items = [
+            RankedCandidateItem(
+                resume_id=row.resume_id,
+                candidate_name=row.candidate_name,
+                email=row.email,
+                score=row.score,
+                pass_fail=row.pass_fail,
+                explanation=row.explanation,
+                injection_scan_passed=row.injection_scan_passed,
+                has_deep_analysis=row.has_deep_analysis,
+                created_at=row.created_at.isoformat() if row.created_at else None,
+            )
+            for row in rows
+        ]
+        return items, total or 0
 
     def _to_domain(self, model: FastTrackResultModel) -> FastTrackResult:
         return FastTrackResult(

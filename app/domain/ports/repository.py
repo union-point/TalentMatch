@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from app.domain.entities.deep_analysis import DeepAnalysis
 from app.domain.entities.fast_track_result import FastTrackResult
 from app.domain.entities.job_description import JobDescription
+from app.domain.entities.ranked_candidate import RankedCandidateItem
 from app.domain.entities.resume import Resume
 
 
@@ -30,6 +31,17 @@ class ResumeRepository(ABC):
 
 
 class FastTrackRepository(ABC):
+    @abstractmethod
+    async def get_ranked_candidates(
+        self,
+        jd_id: uuid.UUID,
+        min_score: int | None = None,
+        pass_fail_only: bool | None = None,
+        search: str | None = None,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[RankedCandidateItem], int]: ...
+
     @abstractmethod
     async def save(self, result: FastTrackResult) -> FastTrackResult: ...
 
