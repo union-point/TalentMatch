@@ -1,0 +1,37 @@
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { useAuth } from '@/auth/auth-context';
+import { sessionDestination } from '@/lib/auth-navigation';
+import { Button } from '@/components/ui/button';
+
+export function ProtectedRoute({
+  organization = true,
+}: {
+  organization?: boolean;
+}) {
+  const { session, loading, error, refresh } = useAuth();
+  const location = useLocation();
+  if (loading)
+    return (
+      <p className="p-8" role="status">
+        Checking your session…
+      </p>
+    );
+  if (error)
+    return (
+      <div className="space-y-3 p-8">
+        <p role="alert">{error}</p>
+        <Button onClick={() => void refresh()}>Retry</Button>
+      </div>
+    );
+  const destination = sessionDestination(
+    session,
+    location.pathname + location.search
+  );
+  if (
+    session?.state !== 'authenticated' ||
+    (organization && (!session.organization || session.organization.locked))
+  ) {
+    return <Navigate to={destination} replace />;
+  }
+  return <Outlet />;
+}
