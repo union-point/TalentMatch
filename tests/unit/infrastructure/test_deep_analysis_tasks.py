@@ -574,20 +574,25 @@ class TestDeepAnalysisTaskAsync:
         )
 
 
-async def test_dispatch_retries_publication_failures_without_consuming_pending_intent():
+async def test_dispatch_commits_leases_before_publication_and_continues_on_failure() -> None:
     from app.tasks.deep_analysis_tasks import _dispatch_pending_deep_analyses_async
 
     ids = [uuid.uuid4(), uuid.uuid4()]
     session = AsyncMock()
     session.__aenter__.return_value = session
-    session.scalars.side_effect = [ids, ids]
+    repo = AsyncMock()
+    repo.lease_pending_dispatch.return_value = ids
+
+    def publish(analysis_id: str) -> None:
+        session.commit.assert_awaited_once()
+        if analysis_id == str(ids[0]):
+            raise RuntimeError("broker down")
+
     with (
         patch("app.tasks.deep_analysis_tasks.AsyncSession", return_value=session),
         patch("app.tasks.deep_analysis_tasks.engine", _make_mock_engine()),
-        patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay") as publish,
+        patch("app.tasks.deep_analysis_tasks.SQLAlchemyDeepAnalysisRepository", return_value=repo),
+        patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay", side_effect=publish) as send,
     ):
-        publish.side_effect = [RuntimeError("broker down"), None, None, None]
         await _dispatch_pending_deep_analyses_async()
-        await _dispatch_pending_deep_analyses_async()
-    assert [c.args[0] for c in publish.call_args_list] == [str(i) for i in ids + ids]
-    session.commit.assert_not_awaited()
+    assert [c.args[0] for c in send.call_args_list] == [str(i) for i in ids]

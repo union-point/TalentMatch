@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.entities.deep_analysis import DeepAnalysis
@@ -43,6 +43,35 @@ class SQLAlchemyDeepAnalysisRepository(DeepAnalysisRepository):
         await self._session.refresh(model)
 
         return self._to_domain(model)
+
+    async def lease_pending_dispatch(self, limit: int, retry_seconds: int) -> list[uuid.UUID]:
+        """Reserve a bounded batch; the caller commits before publishing to the broker."""
+        now = datetime.now(timezone.utc)
+        result = await self._session.scalars(
+            select(DeepAnalysisModel.id)
+            .where(
+                DeepAnalysisModel.status == AnalysisStatus.PENDING.value,
+                or_(
+                    DeepAnalysisModel.next_dispatch_at.is_(None),
+                    DeepAnalysisModel.next_dispatch_at <= now,
+                ),
+            )
+            .order_by(
+                DeepAnalysisModel.next_dispatch_at.asc().nulls_first(),
+                DeepAnalysisModel.created_at,
+                DeepAnalysisModel.id,
+            )
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        ids = list(result)
+        if ids:
+            await self._session.execute(
+                update(DeepAnalysisModel)
+                .where(DeepAnalysisModel.id.in_(ids))
+                .values(next_dispatch_at=now + timedelta(seconds=retry_seconds))
+            )
+        return ids
 
     async def claim_pending(self, analysis_id: uuid.UUID) -> DeepAnalysis | None:
         """Atomically claim a pending job; duplicate deliveries do no work."""

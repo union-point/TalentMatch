@@ -149,3 +149,63 @@ async def test_pair_lookup_selects_latest_attempt_with_deterministic_ties(
         assert await repo.get_by_resume_and_jd(uuid.uuid4(), jd_id) is None
         assert await repo.get_by_resume_and_jd(resume_id, uuid.uuid4()) is None
         assert await repo.get_by_id(uuid.UUID(int=15 * 2**124 + 3)) is not None
+
+
+async def test_dispatch_bounds_backlog_and_retries_only_expired_leases(dispatch_engine) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update
+
+    from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
+
+    async with AsyncSession(dispatch_engine) as session:
+        repo = SQLAlchemyDeepAnalysisRepository(session)
+        analyses = [
+            DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4()) for _ in range(5)
+        ]
+        for analysis in analyses:
+            await repo.save(analysis)
+        await session.commit()
+
+    with (
+        patch("app.tasks.deep_analysis_tasks.engine", dispatch_engine),
+        patch("app.tasks.deep_analysis_tasks.settings.deep_analysis_dispatch_batch_size", 2),
+        patch("app.tasks.deep_analysis_tasks.run_deep_analysis.delay") as publish,
+    ):
+        # One failed publication remains leased too, avoiding a tight broker retry loop.
+        publish.side_effect = [RuntimeError("broker down"), None, None, None, None]
+        await _dispatch_pending_deep_analyses_async()
+        assert publish.call_count == 2
+        first_id = uuid.UUID(publish.call_args_list[0].args[0])
+        await _dispatch_pending_deep_analyses_async()
+        assert publish.call_count == 4
+        await _dispatch_pending_deep_analyses_async()
+        assert publish.call_count == 5
+        assert len({call.args[0] for call in publish.call_args_list}) == 5
+        await _dispatch_pending_deep_analyses_async()
+        assert publish.call_count == 5
+
+        async with AsyncSession(dispatch_engine) as session:
+            await session.execute(
+                update(DeepAnalysisModel)
+                .where(
+                    DeepAnalysisModel.id == first_id,
+                )
+                .values(next_dispatch_at=datetime.now(timezone.utc) - timedelta(seconds=1))
+            )
+            await session.commit()
+        publish.side_effect = None
+        await _dispatch_pending_deep_analyses_async()
+        assert publish.call_count == 6
+        assert publish.call_args.args == (str(first_id),)
+
+
+async def test_uncommitted_lease_is_retried_after_dispatcher_crash(dispatch_engine) -> None:
+    async with AsyncSession(dispatch_engine) as session:
+        repo = SQLAlchemyDeepAnalysisRepository(session)
+        analysis = DeepAnalysis(resume_id=uuid.uuid4(), job_description_id=uuid.uuid4())
+        await repo.save(analysis)
+        await session.commit()
+        assert await repo.lease_pending_dispatch(1, 900) == [analysis.id]
+        await session.rollback()
+        assert await repo.lease_pending_dispatch(1, 900) == [analysis.id]

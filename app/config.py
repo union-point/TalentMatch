@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     ai_fast_track_model: str = "gemini-3.1-flash-lite"
     ai_deep_analysis_provider: str = "gemini"
     ai_deep_analysis_model: str = "gemini-3.1-flash-lite"
+    deep_analysis_dispatch_batch_size: int = Field(default=100, gt=0)
+    deep_analysis_dispatch_retry_seconds: int = Field(default=900, gt=0)
     deep_analysis_timeout_seconds: int = Field(default=240, gt=0)
 
     # OpenAI-compatible provider settings (optional)

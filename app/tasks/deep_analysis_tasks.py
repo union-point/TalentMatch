@@ -4,7 +4,6 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from celery import Task as CeleryTask
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -16,7 +15,6 @@ from app.core.exceptions import (
 from app.domain.value_objects import AnalysisStatus
 from app.infrastructure.ai import AIServiceFactory
 from app.infrastructure.persistence.database import engine
-from app.infrastructure.persistence.models.deep_analysis import DeepAnalysisModel
 from app.infrastructure.persistence.repositories.deep_analysis_repo import (
     SQLAlchemyDeepAnalysisRepository,
 )
@@ -95,24 +93,25 @@ def dispatch_pending_deep_analyses() -> None:
 
 
 async def _dispatch_pending_deep_analyses_async() -> None:
-    """Retry committed pending jobs until a worker claims them.
+    """Publish a bounded leased batch, retrying after the lease if delivery is lost.
 
-    Publishing never consumes the intent, so broker failures or a dispatcher
-    crash cannot lose work. Duplicate deliveries are safe via claim_pending.
+    Commit leases before contacting the broker. Concurrent sweeps skip locked rows;
+    a crash or broker failure leaves the intent eligible after the retry delay.
     """
     await engine.dispose()
     async with AsyncSession(engine) as session:
-        result = await session.scalars(
-            select(DeepAnalysisModel.id).where(
-                DeepAnalysisModel.status == AnalysisStatus.PENDING.value
-            )
+        analysis_ids = await SQLAlchemyDeepAnalysisRepository(session).lease_pending_dispatch(
+            settings.deep_analysis_dispatch_batch_size,
+            settings.deep_analysis_dispatch_retry_seconds,
         )
-        analysis_ids = list(result)
+        await session.commit()
     for analysis_id in analysis_ids:
         try:
             await asyncio.to_thread(run_deep_analysis.delay, str(analysis_id))
         except Exception:
-            logger.exception("Publication failed for %s; will retry next sweep", analysis_id)
+            logger.exception(
+                "Publication failed for %s; will retry after dispatch lease expires", analysis_id
+            )
 
 
 @celery_app.task(name="tasks.recover_expired_deep_analyses")  # type: ignore[untyped-decorator]
