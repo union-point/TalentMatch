@@ -20,8 +20,8 @@ T = TypeVar("T", bound=BaseModel)
 
 MAX_RETRIES = 3
 BASE_DELAY = 2.0
-FAST_TRACK_TIMEOUT = 30
-DEEP_TIMEOUT = 60
+FAST_TRACK_TIMEOUT = 60
+DEEP_TIMEOUT = 100
 MAX_CONCURRENT_REQUESTS = 2
 
 # Status codes that should not be retried

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     ai_fast_track_provider: str = "gemini"
     ai_fast_track_model: str = "gemini-3.1-flash-lite"
-    ai_deep_analysis_provider: str = "gemini"
+    ai_deep_analysis_provider: str = "openai"
     ai_deep_analysis_model: str = "gemini-3.1-flash-lite"
     deep_analysis_dispatch_batch_size: int = Field(default=100, gt=0)
     deep_analysis_dispatch_retry_seconds: int = Field(default=900, gt=0)
@@ -78,8 +78,8 @@ class Settings(BaseSettings):
         return self
 
     # OpenAI-compatible provider settings (optional)
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: str = "api-key"
+    openai_base_url: str = "http://host.docker.internal:8080/v1"
 
 
 settings = Settings()
