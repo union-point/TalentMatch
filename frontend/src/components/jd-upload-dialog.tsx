@@ -50,12 +50,30 @@ export function JdUploadDialog({
   const [popup, setPopup] = useState<HTMLDivElement | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const formBody = useRef<HTMLDivElement>(null);
   const canSubmit = Boolean(title.trim() && company.trim() &&
     (mode === 'text' ? text.trim() : file && !fileError));
 
   useEffect(() => {
     const viewport = window.visualViewport;
-    if (!popup || !viewport) return;
+    const body = formBody.current;
+    if (!popup || !body) return;
+    let bodyHeight = body.clientHeight;
+
+    const observer = new ResizeObserver(() => {
+      const height = body.clientHeight;
+      const shrank = height < bodyHeight;
+      bodyHeight = height;
+      const field = document.activeElement;
+      if (!shrank || !body.contains(field)) return;
+      if (!(field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement)) return;
+
+      const area = body.getBoundingClientRect();
+      const input = field.getBoundingClientRect();
+      if (input.top < area.top || input.bottom > area.bottom) {
+        body.scrollTop += input.top - area.top - 8;
+      }
+    });
 
     function fitVisibleViewport() {
       if (!popup || !viewport) return;
@@ -68,12 +86,14 @@ export function JdUploadDialog({
       popup.style.setProperty('--job-viewport-center', viewport.offsetTop + viewport.height / 2 + 'px');
     }
 
+    observer.observe(body);
     fitVisibleViewport();
-    viewport.addEventListener('resize', fitVisibleViewport);
-    viewport.addEventListener('scroll', fitVisibleViewport);
+    viewport?.addEventListener('resize', fitVisibleViewport);
+    viewport?.addEventListener('scroll', fitVisibleViewport);
     return () => {
-      viewport.removeEventListener('resize', fitVisibleViewport);
-      viewport.removeEventListener('scroll', fitVisibleViewport);
+      observer.disconnect();
+      viewport?.removeEventListener('resize', fitVisibleViewport);
+      viewport?.removeEventListener('scroll', fitVisibleViewport);
     };
   }, [popup]);
 
@@ -120,7 +140,7 @@ export function JdUploadDialog({
         initialFocus={heading}
         finalFocus={triggerRef}
         showCloseButton={!isUploading}
-        className="top-[var(--job-viewport-center,50%)] flex h-[calc(var(--job-viewport-height,100dvh)_-_1rem)] max-h-[calc(var(--job-viewport-height,100dvh)_-_1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 sm:h-auto sm:max-h-[calc(var(--job-viewport-height,100dvh)_-_3rem)] sm:max-w-[35rem]"
+        className="top-[var(--job-viewport-center,50%)] flex h-[calc(var(--job-viewport-height,100dvh)_-_1rem)] max-h-[calc(var(--job-viewport-height,100dvh)_-_1rem)] max-w-[calc(100%-1rem)] flex-col gap-0 overflow-hidden p-0 transition-none sm:h-auto sm:max-h-[calc(var(--job-viewport-height,100dvh)_-_3rem)] sm:max-w-[35rem]"
       >
         <DialogHeader className="shrink-0 border-b px-5 py-4 pr-14 sm:px-7 sm:py-5">
           <DialogTitle ref={heading} tabIndex={-1} className="text-4xl focus:outline-none">New job</DialogTitle>
@@ -128,7 +148,7 @@ export function JdUploadDialog({
         </DialogHeader>
 
         <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} aria-busy={isUploading}>
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4 sm:px-7 sm:py-5">
+          <div ref={formBody} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 [overflow-anchor:none] py-4 sm:px-7 sm:py-5">
             <div className="space-y-1.5">
               <label htmlFor="job-title" className="font-medium">Job title</label>
               <Input id="job-title" placeholder="e.g. Senior Frontend Engineer" value={title}

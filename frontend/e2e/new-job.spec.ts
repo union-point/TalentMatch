@@ -79,9 +79,12 @@ test('new job keeps the action visible on a short mobile viewport and accepts dr
   await expect(trigger).toBeFocused();
   await trigger.click();
   await dialog.getByLabel('Job title').fill(job.title);
-  await dialog.getByRole('textbox', { name: 'Job description', exact: true }).focus();
-  await page.setViewportSize({ width: 360, height: 400 });
+  const description = dialog.getByRole('textbox', { name: 'Job description', exact: true });
+  await description.focus();
+  await page.setViewportSize({ width: 360, height: 310 });
+  await expect(description).toBeInViewport({ ratio: 0.5 });
   await expect(create).toBeInViewport();
+  await page.setViewportSize({ width: 360, height: 400 });
 
   await dialog.getByRole('tab', { name: 'Upload file' }).click();
   const dropZone = dialog.getByRole('group', { name: 'Job description file' });
