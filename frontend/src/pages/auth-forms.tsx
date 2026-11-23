@@ -8,8 +8,9 @@ import {
   useNavigate,
   useSearchParams,
 } from 'react-router-dom';
-import { ArrowRight, Eye, EyeOff, Mail } from 'lucide-react';
+import { ArrowRight, Mail } from 'lucide-react';
 import { useAuth } from '@/auth/auth-context';
+import { AuthPasswordField } from '@/auth/auth-password-field';
 import { AuthShell } from '@/auth/auth-shell';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -55,7 +56,6 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
   const [organization, setOrganization] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const registration = useMutation({
@@ -212,30 +212,13 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
             </label>
           )}
           {(needsPassword || mode === 'accept-invitation') && (
-            <div className="space-y-1">
-              <div className="mb-1.5 flex items-center justify-between gap-2 text-sm">
-                <label htmlFor="auth-password">
-                  {mode === 'login' ? 'Password' : 'New password'}
-                  {mode === 'accept-invitation' && !needsPassword && ' (new accounts only)'}
-                </label>
-                {mode === 'login' && <Link to="/forgot-password" className="text-link text-xs">Forgot password?</Link>}
-              </div>
-              <div className="relative">
-                <Input id="auth-password" type={showPassword ? 'text' : 'password'}
-                  name="password" className="pr-12"
-                  placeholder={mode === 'login' ? 'Enter your password' : 'Choose a password'}
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  value={password} onChange={(e) => setPassword(e.target.value)}
-                  minLength={mode === 'login' ? 1 : 15} maxLength={128} required={needsPassword}
-                />
-                <button type="button" className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted-foreground"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword(!showPassword)}>
-                  {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
-                </button>
-              </div>
-              {mode !== 'login' && <p className="text-xs text-muted-foreground">Use at least 15 characters. Spaces are welcome.</p>}
-            </div>
+            <AuthPasswordField
+              current={mode === 'login'}
+              required={needsPassword}
+              value={password}
+              onChange={setPassword}
+              action={mode === 'login' && <Link to="/forgot-password" className="text-link text-xs">Forgot password?</Link>}
+            />
           )}
           {mode === 'accept-invitation' && (
             <p className="text-sm text-muted-foreground">

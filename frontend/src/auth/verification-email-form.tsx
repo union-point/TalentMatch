@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Mail } from 'lucide-react';
 import { useAuth } from '@/auth/auth-context';
 import { AuthShell } from '@/auth/auth-shell';
-import { useCooldown, useVerificationRetry } from '@/auth/verification-cooldown';
+import { useAuthRequestRetry, useCooldown } from '@/auth/auth-request-cooldown';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiError, fetchPost } from '@/lib/api';
@@ -27,7 +27,7 @@ export function VerificationEmailForm({ pending, returnTo, requiresVerification 
 }) {
   const { loading, refresh, logout } = useAuth();
   const navigate = useNavigate();
-  const { rateLimitedUntil, address, rememberRateLimit } = useVerificationRetry();
+  const { rateLimitedUntil, address, rememberRateLimit } = useAuthRequestRetry();
   const [email, setEmail] = useState(pending?.email ?? address);
   const submitting = useRef(false);
   const retryAt = Math.max(pending?.retryAt ?? 0, rateLimitedUntil);

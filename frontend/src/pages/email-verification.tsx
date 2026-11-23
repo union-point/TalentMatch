@@ -6,7 +6,7 @@ import { ArrowRight } from 'lucide-react';
 import { useAuth } from '@/auth/auth-context';
 import { AuthShell } from '@/auth/auth-shell';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { useCooldown, useVerificationRetry } from '@/auth/verification-cooldown';
+import { useAuthRequestRetry, useCooldown } from '@/auth/auth-request-cooldown';
 import { VerificationEmailForm } from '@/auth/verification-email-form';
 import type { PendingEmail } from '@/auth/verification-email-form';
 import { ApiError, fetchPost } from '@/lib/api';
@@ -73,7 +73,7 @@ function VerificationLoading() {
 function VerifyLink({ token, returnTo }: { token: string; returnTo: string }) {
   const { loading, refresh, session } = useAuth();
   const submitting = useRef(false);
-  const { rateLimitedUntil, rememberRateLimit } = useVerificationRetry();
+  const { rateLimitedUntil, rememberRateLimit } = useAuthRequestRetry();
   const seconds = useCooldown(rateLimitedUntil);
   const verification = useMutation({
     gcTime: 0,

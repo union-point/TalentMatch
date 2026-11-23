@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { ApiError } from '@/lib/api';
-import { verificationResendDelayMs } from '@/lib/auth-navigation';
 
 export function useCooldown(retryAt: number): number {
   const [now, setNow] = useState(Date.now);
@@ -23,23 +22,23 @@ export function useCooldown(retryAt: number): number {
 
 function retryDeadline(error: ApiError): number {
   const seconds = error.retryAfter;
-  return Date.now() + (Number.isSafeInteger(seconds) && seconds > 0 ? seconds * 1000 : verificationResendDelayMs);
+  return Date.now() + (Number.isSafeInteger(seconds) && seconds > 0 ? seconds * 1000 : 60_000);
 }
 
-export function useVerificationRetry() {
+export function useAuthRequestRetry() {
   const { state, pathname, search, hash } = useLocation();
   const navigate = useNavigate();
-  const retryState = state as { verificationRetryAt?: number; address?: string } | null;
+  const retryState = state as { authRetryAt?: number; verificationRetryAt?: number; address?: string } | null;
 
   function rememberRateLimit(error: ApiError, address?: string) {
     navigate(pathname + search + hash, {
       replace: true,
-      state: { ...retryState, address, verificationRetryAt: retryDeadline(error) },
+      state: { ...retryState, address, authRetryAt: retryDeadline(error) },
     });
   }
 
   return {
-    rateLimitedUntil: retryState?.verificationRetryAt ?? 0,
+    rateLimitedUntil: retryState?.authRetryAt ?? retryState?.verificationRetryAt ?? 0,
     address: retryState?.address ?? '',
     rememberRateLimit,
   };
