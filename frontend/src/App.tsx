@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/auth/auth-context';
@@ -6,13 +7,15 @@ import { Layout } from '@/components/layout';
 import { Dashboard } from '@/pages/dashboard';
 import { JobsList } from '@/pages/jobs-list';
 import { CandidateList } from '@/pages/candidate-list';
-import { CandidateDetail } from '@/pages/candidate-detail';
 import { AuthForm } from '@/pages/auth-forms';
 import { MfaPage } from '@/pages/mfa';
 import { Account } from '@/pages/account';
 import { OrganizationPage } from '@/pages/organization';
 
 const queryClient = new QueryClient();
+const CandidateDetail = lazy(() =>
+  import('@/pages/candidate-detail').then((module) => ({ default: module.CandidateDetail }))
+);
 
 function App() {
   return (
@@ -57,7 +60,11 @@ function App() {
                 <Route path="/jobs/:jdId" element={<CandidateList />} />
                 <Route
                   path="/candidates/:resumeId/job/:jdId"
-                  element={<CandidateDetail />}
+                  element={
+                    <Suspense fallback={<p role="status">Loading candidate…</p>}>
+                      <CandidateDetail />
+                    </Suspense>
+                  }
                 />
                 <Route path="/organization" element={<OrganizationPage />} />
               </Route>
