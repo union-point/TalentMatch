@@ -3,6 +3,9 @@ import type { AuthSession } from '../types/auth.ts';
 export const verificationPath = '/verify-email';
 export const pendingVerificationPath = '/verify-email/pending';
 export const verificationResendDelayMs = 60_000;
+export const forgotPasswordPath = '/forgot-password';
+export const passwordResetInboxPath = '/forgot-password/check-email';
+export const resetPasswordPath = '/reset-password';
 
 export function withReturnTo(path: string, returnTo: string): string {
   return returnTo === '/' ? path : `${path}?returnTo=${encodeURIComponent(returnTo)}`;
@@ -32,8 +35,9 @@ export function safeReturnTo(value: string | null | undefined): string {
       '/mfa',
       verificationPath,
       pendingVerificationPath,
-      '/forgot-password',
-      '/reset-password',
+      forgotPasswordPath,
+      passwordResetInboxPath,
+      resetPasswordPath,
     ].includes(pathname)
   )
     return '/';

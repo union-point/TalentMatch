@@ -9,7 +9,15 @@ import { JobsList } from '@/pages/jobs-list';
 import { CandidateList } from '@/pages/candidate-list';
 import { AuthForm } from '@/pages/auth-forms';
 import { EmailVerification, PendingVerification } from '@/pages/email-verification';
-import { pendingVerificationPath, verificationPath } from '@/lib/auth-navigation';
+import { PasswordResetRequest } from '@/pages/password-reset-request';
+import { ResetPassword } from '@/pages/reset-password';
+import {
+  forgotPasswordPath,
+  passwordResetInboxPath,
+  pendingVerificationPath,
+  resetPasswordPath,
+  verificationPath,
+} from '@/lib/auth-navigation';
 import { MfaPage } from '@/pages/mfa';
 import { Account } from '@/pages/account';
 import { OrganizationPage } from '@/pages/organization';
@@ -38,14 +46,9 @@ function App() {
               element={<EmailVerification />}
             />
             <Route path={pendingVerificationPath} element={<PendingVerification />} />
-            <Route
-              path="/forgot-password"
-              element={<AuthForm key="forgot" mode="forgot-password" />}
-            />
-            <Route
-              path="/reset-password"
-              element={<AuthForm key="reset" mode="reset-password" />}
-            />
+            <Route path={forgotPasswordPath} element={<PasswordResetRequest />} />
+            <Route path={passwordResetInboxPath} element={<PasswordResetRequest inbox />} />
+            <Route path={resetPasswordPath} element={<ResetPassword />} />
             <Route
               path="/accept-invitation"
               element={<AuthForm key="invite" mode="accept-invitation" />}

@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ApiError, fetchPost } from '@/lib/api';
 import {
+  forgotPasswordPath,
   pendingVerificationPath,
   safeReturnTo,
   sessionDestination,
@@ -25,17 +26,10 @@ import {
 } from '@/lib/auth-navigation';
 import type { AuthSession } from '@/types/auth';
 
-type Mode =
-  | 'login'
-  | 'signup'
-  | 'forgot-password'
-  | 'reset-password'
-  | 'accept-invitation';
+type Mode = 'login' | 'signup' | 'accept-invitation';
 const titles: Record<Mode, string> = {
   login: 'Sign in',
   signup: 'Create your organization',
-  'forgot-password': 'Reset your password',
-  'reset-password': 'Choose a new password',
   'accept-invitation': 'Join your team',
 };
 
@@ -44,17 +38,18 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
+  const loginState = location.state as { email?: string } | null;
+  const fromPasswordReset = mode === 'login' && params.get('source') === 'password-reset';
   const [token] = useState(
     () =>
       new URLSearchParams(location.hash.slice(1)).get('token') ??
       (mode === 'accept-invitation' ? auth.invitationToken : '')
   );
   const [email, setEmail] = useState(
-    () => (location.state as { email?: string } | null)?.email ?? auth.session?.user?.email ?? ''
+    () => loginState?.email ?? (fromPasswordReset ? '' : auth.session?.user?.email ?? '')
   );
   const [password, setPassword] = useState('');
   const [organization, setOrganization] = useState('');
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
@@ -72,14 +67,8 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
     : error;
   const returnTo = safeReturnTo(destination ?? params.get('returnTo'));
   const needsPassword =
-    mode === 'login' ||
-    mode === 'signup' ||
-    mode === 'reset-password' ||
-    (mode === 'accept-invitation' && auth.session?.state !== 'authenticated');
-  const needsEmail =
-    mode === 'login' ||
-    mode === 'signup' ||
-    mode === 'forgot-password';
+    mode !== 'accept-invitation' || auth.session?.state !== 'authenticated';
+  const needsEmail = mode !== 'accept-invitation';
 
   useEffect(() => {
     if (location.hash)
@@ -106,7 +95,6 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
       return;
     }
     setError('');
-    setMessage('');
     setBusy(true);
     try {
       if (mode === 'login') {
@@ -119,13 +107,7 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
           replace: true,
           state: session.state === 'email_verification_required' ? { email: session.user?.email } : undefined,
         });
-      } else if (mode === 'forgot-password') {
-        const result = await fetchPost<{ detail: string }>(
-          '/v1/auth/forgot-password',
-          { email }
-        );
-        setMessage(result.detail);
-      } else if (mode === 'accept-invitation') {
+      } else {
         const session = await fetchPost<AuthSession>(
           '/v1/auth/accept-invitation',
           { token, ...(password ? { password } : {}) }
@@ -133,13 +115,6 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
         auth.rememberInvitation('');
         auth.update(session);
         navigate(sessionDestination(session), { replace: true });
-      } else {
-        const result = await fetchPost<{ detail: string }>(`/v1/auth/${mode}`, {
-          token,
-          ...(mode === 'reset-password' ? { password } : {}),
-        });
-        await auth.refresh();
-        setMessage(result.detail);
       }
       setPassword('');
     } catch (cause) {
@@ -153,15 +128,14 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
 
   if (
     !auth.error &&
-    (mode === 'signup' || (mode === 'login' && !destination)) &&
+    (mode === 'signup' || (mode === 'login' && !destination && !fromPasswordReset)) &&
     (auth.session?.state === 'authenticated' || auth.session?.state === 'mfa_challenge_required' ||
       (mode === 'signup' && auth.session?.state === 'email_verification_required'))
   ) {
     return <Navigate replace to={sessionDestination(auth.session, returnTo)} />;
   }
 
-  const missingLink =
-    ['reset-password', 'accept-invitation'].includes(mode) && !token;
+  const missingLink = mode === 'accept-invitation' && !token;
   return (
     <AuthShell
       focusTitle={mode === 'signup' || mode === 'login'}
@@ -171,8 +145,6 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
       description={{
         login: 'Welcome back. Enter your details to access your workspace.',
         signup: 'Create a private workspace for your hiring team.',
-        'forgot-password': 'Enter your email to request a password reset link.',
-        'reset-password': 'Set a new password for your TalentMatch account.',
         'accept-invitation': 'Accept your invitation to the hiring workspace.',
       }[mode]}
     >
@@ -211,15 +183,17 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
               />
             </label>
           )}
-          {(needsPassword || mode === 'accept-invitation') && (
-            <AuthPasswordField
-              current={mode === 'login'}
-              required={needsPassword}
-              value={password}
-              onChange={setPassword}
-              action={mode === 'login' && <Link to="/forgot-password" className="text-link text-xs">Forgot password?</Link>}
-            />
-          )}
+          <AuthPasswordField
+            current={mode === 'login'}
+            required={needsPassword}
+            value={password}
+            onChange={setPassword}
+            action={mode === 'login' && (
+              <Link to={withReturnTo(forgotPasswordPath, returnTo)} className="text-link text-xs">
+                Forgot password?
+              </Link>
+            )}
+          />
           {mode === 'accept-invitation' && (
             <p className="text-sm text-muted-foreground">
               Already have an account?{' '}
@@ -236,11 +210,6 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
           {formError && (
             <p role="alert" className="text-sm text-destructive">
               {formError}
-            </p>
-          )}
-          {message && (
-            <p role="status" className="text-sm">
-              {message}
             </p>
           )}
           <Button

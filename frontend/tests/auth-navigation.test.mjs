@@ -21,6 +21,7 @@ test('return destinations only accept internal application URLs', () => {
     '/login',
     '/mfa',
     '/verify-email/pending',
+    '/forgot-password/check-email',
     '/MFA/',
     '/%6dfa',
     '/jobs/../mfa',

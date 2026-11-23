@@ -35,7 +35,7 @@ export function AuthShell({ title, description, children, accountLink, focusTitl
         <section className="access-form">
           <div className="access-form-inner">
             <div className="section-label flex items-center gap-2"><span className="access-rule" /> Workspace access</div>
-            <h1 ref={heading} tabIndex={focusTitle ? -1 : undefined} className="display-title">{title}</h1>
+            <h1 ref={heading} tabIndex={focusTitle ? -1 : undefined} className="display-title focus-visible:outline-none">{title}</h1>
             {description && <p className="access-description">{description}</p>}
             <div className="access-fields">{children}</div>
           </div>
