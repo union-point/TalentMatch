@@ -1,6 +1,8 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { sessionDestination } from '@/lib/auth-navigation';
+import { AuthShell } from '@/auth/auth-shell';
+import { AuthForm } from '@/pages/auth-forms';
 import { Button } from '@/components/ui/button';
 
 export function ProtectedRoute({
@@ -16,12 +18,13 @@ export function ProtectedRoute({
         Checking your session…
       </p>
     );
+  if (error && !session) return <AuthForm mode="login" destination={location.pathname + location.search} />;
   if (error)
     return (
-      <div className="space-y-3 p-8">
+      <AuthShell title="Reconnect to your workspace" description="Your session could not be checked. Try again to continue.">
         <p role="alert">{error}</p>
         <Button onClick={() => void refresh()}>Retry</Button>
-      </div>
+      </AuthShell>
     );
   const destination = sessionDestination(
     session,
