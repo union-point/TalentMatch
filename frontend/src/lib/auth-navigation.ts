@@ -9,7 +9,14 @@ export function safeReturnTo(value: string | null | undefined): string {
     Array.from(value).some((character) => character.charCodeAt(0) <= 32)
   )
     return '/';
-  const pathname = value.split(/[?#]/)[0];
+  let pathname: string;
+  try {
+    pathname = decodeURI(new URL(value, 'https://app.invalid').pathname)
+      .replace(/\/+$/, '')
+      .toLowerCase();
+  } catch {
+    return '/';
+  }
   if (
     [
       '/login',
@@ -31,10 +38,7 @@ export function sessionDestination(
   if (!session || session.state === 'anonymous')
     return `/login?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`;
   if (session.state === 'email_verification_required') return '/verify-email';
-  if (
-    session.state === 'mfa_enrollment_required' ||
-    session.state === 'mfa_challenge_required'
-  )
+  if (session.state === 'mfa_challenge_required')
     return `/mfa?returnTo=${encodeURIComponent(safeReturnTo(returnTo))}`;
   if (!session.organization || session.organization.locked) {
     const destination = safeReturnTo(returnTo);

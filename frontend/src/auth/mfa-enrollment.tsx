@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { useAuth } from '@/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchPost } from '@/lib/api';
-import type { AuthSession, RecoverySession } from '@/types/auth';
+import type { RecoverySession } from '@/types/auth';
 
 export function RecoveryCodes({
   codes,
@@ -46,15 +47,16 @@ export function MfaEnrollment({
   onComplete,
 }: {
   replacing: boolean;
-  onComplete: (session: AuthSession) => void;
+  onComplete: () => void;
 }) {
+  const { update } = useAuth();
   const [password, setPassword] = useState('');
   const [factor, setFactor] = useState('');
   const [code, setCode] = useState('');
   const [setup, setSetup] = useState<{ uri: string; qr_code: string } | null>(
     null
   );
-  const [result, setResult] = useState<RecoverySession | null>(null);
+  const [recoveryCodes, setRecoveryCodes] = useState<string[] | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -73,11 +75,12 @@ export function MfaEnrollment({
         setPassword('');
         setFactor('');
       } else {
-        setResult(
-          await fetchPost<RecoverySession>('/v1/auth/mfa/confirm', {
-            code: code.trim(),
-          })
-        );
+        const result = await fetchPost<RecoverySession>('/v1/auth/mfa/confirm', {
+          code: code.trim(),
+        });
+        const { recovery_codes: codes, ...session } = result;
+        update(session);
+        setRecoveryCodes(codes);
         setSetup(null);
         setCode('');
       }
@@ -88,13 +91,8 @@ export function MfaEnrollment({
     }
   }
 
-  if (result)
-    return (
-      <RecoveryCodes
-        codes={result.recovery_codes}
-        onDone={() => onComplete(result)}
-      />
-    );
+  if (recoveryCodes)
+    return <RecoveryCodes codes={recoveryCodes} onDone={onComplete} />;
   return (
     <form onSubmit={submit} className="space-y-4">
       {!setup ? (

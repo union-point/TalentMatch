@@ -121,19 +121,20 @@ export function Account() {
           </Button>
         </form>
       </section>
-      <section className="settings-section space-y-4">
-        <h2 className="font-semibold">Authenticator app</h2>
+      <section
+        aria-labelledby="two-factor-heading"
+        className="settings-section space-y-4"
+      >
+        <h2 id="two-factor-heading" className="font-semibold">
+          Two-factor authentication
+        </h2>
         <p className="text-sm">
-          {auth.session?.mfa_enabled ? 'Enabled' : 'Not enabled'}
-          {auth.session?.organization?.role === 'owner'
-            ? ' · Required for organization owners'
-            : ''}
+          {auth.session?.mfa_enabled ? 'On' : 'Off'}
         </p>
         {enroll ? (
           <MfaEnrollment
             replacing={!!auth.session?.mfa_enabled}
-            onComplete={(session) => {
-              auth.update(session);
+            onComplete={() => {
               setEnroll(false);
               setMessage(
                 'Authenticator saved. Other sessions have been signed out.'
@@ -153,12 +154,9 @@ export function Account() {
         {auth.session?.mfa_enabled && !enroll && !codes.length && (
           <div className="space-y-3 border-t pt-4">
             <p className="text-sm">
-              To regenerate recovery codes
-              {auth.session.organization?.role !== 'owner'
-                ? ' or disable MFA'
-                : ''}
-              , confirm your password and a current authenticator or recovery
-              code.
+              To regenerate recovery codes or turn off two-factor
+              authentication, enter your password and an authenticator or
+              recovery code.
             </p>
             <label className="block space-y-1 text-sm">
               Current password
@@ -186,22 +184,23 @@ export function Account() {
               >
                 Regenerate recovery codes
               </Button>
-              {auth.session.organization?.role !== 'owner' && (
-                <Button
-                  variant="destructive"
-                  disabled={busy || !password || !code}
-                  onClick={() => void manageMfa(true)}
-                >
-                  Disable MFA
-                </Button>
-              )}
+              <Button
+                variant="destructive"
+                className="h-auto min-h-10 max-w-full whitespace-normal py-2"
+                disabled={busy || !password || !code}
+                onClick={() => void manageMfa(true)}
+              >
+                Turn off two-factor authentication
+              </Button>
             </div>
           </div>
         )}
-        <p className="text-xs text-muted-foreground">
-          Save your recovery codes securely. If you lose both your authenticator
-          and all recovery codes, access cannot be restored.
-        </p>
+        {auth.session?.mfa_enabled && (
+          <p className="text-xs text-muted-foreground">
+            Save your recovery codes securely. If you lose both your
+            authenticator and all recovery codes, access cannot be restored.
+          </p>
+        )}
       </section>
       <div className="flex flex-wrap gap-3">
         <Button
