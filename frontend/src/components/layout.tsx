@@ -1,85 +1,86 @@
-import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom';
-import { Briefcase, LayoutDashboard } from 'lucide-react';
 import { useState } from 'react';
+import { NavLink, Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { BriefcaseBusiness, Building2, ChevronRight, LayoutDashboard, LogOut, Menu, ShieldCheck, Users, X } from 'lucide-react';
 import { useAuth } from '@/auth/auth-context';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Brand } from '@/components/brand';
 
-const navItems = [
+const hiring = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/jobs', label: 'Jobs', icon: Briefcase },
+  { to: '/jobs', label: 'Jobs', icon: BriefcaseBusiness },
+];
+const settings = [
+  { to: '/organization', label: 'Organization', icon: Users },
+  { to: '/account', label: 'Account security', icon: ShieldCheck },
 ];
 
 export function Layout() {
   const auth = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
   const [error, setError] = useState('');
+  const org = auth.session?.organization;
+  const hasWorkspace = org && !org.locked;
+  const email = auth.session?.user?.email ?? '';
+  const groups = hasWorkspace
+    ? [{ title: 'Workspace', links: hiring }, { title: 'Settings', links: settings }]
+    : [{ title: 'Settings', links: settings.filter((link) => link.to === '/account') }];
+  const current = pathname.startsWith('/candidates/') ? 'Candidate review'
+    : pathname.startsWith('/jobs/') ? 'Job review'
+    : [...hiring, ...settings].find((item) => item.to === pathname)?.label;
+
+  async function signOut() {
+    try {
+      await auth.logout();
+      navigate('/login');
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not sign out.');
+    }
+  }
+
   return (
-    <div className="flex min-h-screen">
-      <aside className="flex w-64 shrink-0 flex-col border-r bg-sidebar p-4">
-        <h1 className="mb-8 text-xl font-bold text-sidebar-primary">
-          TalentMatch
-        </h1>
-        <nav className="space-y-1">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                cn(
-                  'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )
-              }
-              end={to === '/'}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </NavLink>
-          ))}
-          <NavLink
-            to="/organization"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-sidebar-accent"
-          >
-            Organization
-          </NavLink>
-          <Link
-            to="/account"
-            className="block rounded-md px-3 py-2 text-sm hover:bg-sidebar-accent"
-          >
-            Account security
-          </Link>
-        </nav>
-        <div className="mt-auto space-y-2 pt-8">
-          <p className="truncate text-sm font-medium">
-            {auth.session?.organization?.name}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {auth.session?.user?.email}
-          </p>
-          {error && (
-            <p role="alert" className="text-xs text-destructive">
-              {error}
-            </p>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              void auth
-                .logout()
-                .then(() => navigate('/login'))
-                .catch((cause) => setError(cause.message));
-            }}
-          >
-            Sign out
-          </Button>
+    <div className="workspace">
+      <a href="#workspace-content" className="skip-link">Skip to content</a>
+      <aside className="workspace-sidebar">
+        <div className="workspace-brand">
+          <Brand />
+          <button className="mobile-menu" aria-expanded={open} aria-controls="workspace-menu"
+            aria-label={open ? 'Close navigation' : 'Open navigation'} onClick={() => setOpen(!open)}>
+            {open ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+        <div className="sidebar-body" id="workspace-menu" data-open={open}>
+          <nav aria-label="Main navigation">
+            {groups.map(({ title, links }) => (
+              <div key={title} className="nav-group">
+                <div className="section-label">{title}</div>
+                {links.map(({ to, label, icon: Icon }) => (
+                  <NavLink to={to} key={to} end={to === '/'} onClick={() => setOpen(false)}
+                    className={({ isActive }) => 'nav-link' + (isActive ? ' active' : '')}>
+                    <Icon size={17} />{label}
+                  </NavLink>
+                ))}
+              </div>
+            ))}
+          </nav>
+          <div className="profile-block">
+            <span className="avatar" aria-hidden="true">{email.slice(0, 1).toUpperCase()}</span>
+            <Link to="/account" onClick={() => setOpen(false)} className="min-w-0">
+              <span className="block truncate text-sm font-medium">{email}</span>
+              <span className="block text-xs capitalize text-muted-foreground">{org?.role ?? 'Account'}</span>
+            </Link>
+            <button aria-label="Sign out" title="Sign out" className="icon-action" onClick={() => void signOut()}><LogOut size={16} /></button>
+            {error && <p role="alert" className="col-span-full text-xs">{error}</p>}
+          </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 overflow-x-hidden p-8">
-        <Outlet />
-      </main>
+      <div className="workspace-body">
+        <header className="workspace-topline">
+          <span className="flex min-w-0 items-center gap-2"><Building2 size={15} /><span className="truncate">{org?.name ?? 'Account'}</span></span>
+          <ChevronRight size={13} /><span className="shrink-0 text-foreground">{current}</span>
+        </header>
+        <main id="workspace-content" tabIndex={-1} className="workspace-content"><Outlet /></main>
+      </div>
     </div>
   );
 }

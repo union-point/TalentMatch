@@ -16,11 +16,12 @@ interface JdSelectorProps {
 export function JdSelector({ entries, value, onChange }: JdSelectorProps) {
   return (
     <Select
+      items={entries.map((entry) => ({ value: entry.id, label: `${entry.title} — ${entry.company}` }))}
       value={value}
       onValueChange={(v) => onChange(v ?? '')}
     >
-      <SelectTrigger className="w-full">
-        <SelectValue placeholder="Select a job description..." />
+      <SelectTrigger aria-label="Job description" className="w-full min-w-0">
+        <SelectValue placeholder="Select a job description…" />
       </SelectTrigger>
       <SelectContent>
         {entries.length === 0 && (

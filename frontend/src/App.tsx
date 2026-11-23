@@ -46,7 +46,9 @@ function App() {
             />
             <Route path="/mfa" element={<MfaPage />} />
             <Route element={<ProtectedRoute organization={false} />}>
-              <Route path="/account" element={<Account />} />
+              <Route element={<Layout />}>
+                <Route path="/account" element={<Account />} />
+              </Route>
             </Route>
             <Route element={<ProtectedRoute />}>
               <Route element={<Layout />}>

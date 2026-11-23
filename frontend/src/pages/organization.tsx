@@ -81,7 +81,7 @@ export function OrganizationPage() {
 
   return (
     <div className="max-w-3xl space-y-8">
-      <div>
+      <div className="page-heading">
         <h1 className="text-2xl font-semibold">
           {session?.organization?.name}
         </h1>
@@ -95,7 +95,7 @@ export function OrganizationPage() {
           {error}
         </p>
       )}
-      <section className="space-y-4">
+      <section className="settings-section space-y-4">
         <h2 className="font-semibold">Members</h2>
         {members.isPending && <p role="status">Loading members…</p>}
         {members.error && <p role="alert">{members.error.message}</p>}
@@ -131,9 +131,9 @@ export function OrganizationPage() {
       </section>
       {owner && (
         <>
-          <section className="space-y-4">
+          <section className="settings-section space-y-4">
             <h2 className="font-semibold">Invite a teammate</h2>
-            <form onSubmit={invite} className="flex gap-2">
+            <form onSubmit={invite} className="flex flex-col gap-2 sm:flex-row">
               <Input
                 type="email"
                 aria-label="Teammate email"
@@ -151,7 +151,7 @@ export function OrganizationPage() {
               organization.
             </p>
           </section>
-          <section className="space-y-4">
+          <section className="settings-section space-y-4">
             <h2 className="font-semibold">Pending invitations</h2>
             {invitations.error && (
               <p role="alert">{invitations.error.message}</p>

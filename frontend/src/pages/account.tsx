@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { MfaEnrollment, RecoveryCodes } from '@/auth/mfa-enrollment';
 import { Button } from '@/components/ui/button';
@@ -71,12 +71,9 @@ export function Account() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8 p-8">
-      <div>
-        <Link className="text-sm underline" to="/">
-          TalentMatch
-        </Link>
-        <h1 className="mt-4 text-2xl font-semibold">Account security</h1>
+    <div className="max-w-3xl space-y-6">
+      <div className="page-heading">
+        <h1 className="display-title">Account security</h1>
         <p className="text-sm text-muted-foreground">
           {auth.session?.user?.email}
         </p>
@@ -93,7 +90,7 @@ export function Account() {
           {error}
         </p>
       )}
-      <section className="space-y-4 rounded-xl border p-6">
+      <section className="settings-section space-y-4">
         <h2 className="font-semibold">Password</h2>
         <form onSubmit={changePassword} className="space-y-4">
           <label className="block space-y-1 text-sm">
@@ -124,7 +121,7 @@ export function Account() {
           </Button>
         </form>
       </section>
-      <section className="space-y-4 rounded-xl border p-6">
+      <section className="settings-section space-y-4">
         <h2 className="font-semibold">Authenticator app</h2>
         <p className="text-sm">
           {auth.session?.mfa_enabled ? 'Enabled' : 'Not enabled'}
@@ -182,7 +179,7 @@ export function Account() {
                 maxLength={128}
               />
             </label>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <Button
                 disabled={busy || !password || !code}
                 onClick={() => void manageMfa(false)}
@@ -206,7 +203,7 @@ export function Account() {
           and all recovery codes, access cannot be restored.
         </p>
       </section>
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <Button
           variant="outline"
           onClick={() => {

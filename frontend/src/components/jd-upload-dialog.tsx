@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState } from 'react';
 import { Upload } from 'lucide-react';
 import {
   Dialog,
@@ -13,39 +13,39 @@ import { Input } from '@/components/ui/input';
 
 interface JdUploadDialogProps {
   open: boolean;
+  error?: string;
   onOpenChange: (open: boolean) => void;
   onUpload: (data: { file: File; title: string; company: string }) => void;
   isUploading: boolean;
 }
 
-export function JdUploadDialog({ open, onOpenChange, onUpload, isUploading }: JdUploadDialogProps) {
+export function JdUploadDialog({ open, onOpenChange, onUpload, isUploading, error }: JdUploadDialogProps) {
   const [title, setTitle] = useState('');
   const [company, setCompany] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!file || !title.trim() || !company.trim()) return;
     onUpload({ file, title: title.trim(), company: company.trim() });
-    setTitle('');
-    setCompany('');
-    setFile(null);
+
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-md" showCloseButton={!isUploading}>
         <DialogHeader>
-          <DialogTitle>Upload Job Description</DialogTitle>
+          <DialogTitle className="text-4xl">New job</DialogTitle>
           <DialogDescription>
-            Upload a PDF, DOCX, or HTML file describing the job position.
+            Add the role and its job description to your workspace.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <label className="text-sm font-medium">Title</label>
+            <label htmlFor="job-title" className="text-sm font-medium">Job title</label>
             <Input
+              id="job-title" disabled={isUploading}
               placeholder="e.g. Senior Frontend Engineer"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -53,8 +53,9 @@ export function JdUploadDialog({ open, onOpenChange, onUpload, isUploading }: Jd
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Company</label>
+            <label htmlFor="job-company" className="text-sm font-medium">Company</label>
             <Input
+              id="job-company" disabled={isUploading}
               placeholder="e.g. Acme Corp"
               value={company}
               onChange={(e) => setCompany(e.target.value)}
@@ -62,9 +63,9 @@ export function JdUploadDialog({ open, onOpenChange, onUpload, isUploading }: Jd
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">File</label>
+            <label htmlFor="job-file" className="text-sm font-medium">Job description file</label>
             <Input
-              ref={fileRef}
+              id="job-file" disabled={isUploading}
               type="file"
               accept=".pdf,.docx,.html,.htm"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -74,8 +75,9 @@ export function JdUploadDialog({ open, onOpenChange, onUpload, isUploading }: Jd
               Supported formats: PDF, DOCX, HTML
             </p>
           </div>
+          {error && <p role="alert">{error}</p>}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" disabled={isUploading} variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={!file || !title.trim() || !company.trim() || isUploading}>
