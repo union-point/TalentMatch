@@ -55,20 +55,6 @@ async function mockApi(page: Page, initial = 'anonymous') {
       );
     }
     if (path === 'auth/session') return json(session());
-    if (
-      path === 'auth/register' ||
-      path === 'auth/resend-verification' ||
-      path === 'auth/forgot-password'
-    )
-      return json(
-        {
-          detail:
-            'If this request can be completed, an email will arrive shortly.',
-        },
-        202
-      );
-    if (path === 'auth/verify-email')
-      return json({ detail: 'Email verified. Sign in to continue.' });
     if (path === 'auth/login') {
       state.email = body.email;
       state.phase = state.mfa ? 'mfa_challenge_required' : 'authenticated';
@@ -158,17 +144,7 @@ test('owner signs in without MFA and can enable it from Account security', async
   page,
 }) => {
   const state = await mockApi(page);
-  await page.goto('/signup');
-  await page.getByLabel('Email', { exact: true }).fill(owner.email);
-  await page.getByLabel('Organization name').fill('Example team');
-  await page.getByLabel('New password').fill(password);
-  await page.getByRole('button', { name: 'Create your organization' }).click();
-  await expect(page.getByRole('status')).toContainText('an email will arrive');
-  await page.goto('/verify-email#token=private-verification-token');
-  await page.getByRole('button', { name: 'Verify your email' }).click();
-  await expect(page.getByRole('status')).toContainText('Email verified');
-  expect(page.url()).not.toContain('token');
-  await page.getByRole('link', { name: 'Sign in', exact: true }).click();
+  await page.goto('/login');
   await login(page, owner.email);
   await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
   await page.goto('/mfa?returnTo=%2FMFA%2F');

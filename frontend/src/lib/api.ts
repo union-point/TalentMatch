@@ -7,12 +7,14 @@ const expiryListeners = new Set<() => void>();
 export class ApiError extends Error {
   status: number;
   code: string;
+  readonly retryAfter: number;
 
-  constructor(message: string, status: number, code: string) {
+  constructor(message: string, status: number, code: string, retryAfter = 0) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -85,7 +87,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
         ? record.detail
         : `Request failed (${response.status})`,
       response.status,
-      code
+      code,
+      Number(response.headers.get('Retry-After')) || 0
     );
   }
   if (response.status === 204) return undefined as T;

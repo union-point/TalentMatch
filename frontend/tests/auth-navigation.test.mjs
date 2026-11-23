@@ -20,6 +20,7 @@ test('return destinations only accept internal application URLs', () => {
     '/\\evil.example',
     '/login',
     '/mfa',
+    '/verify-email/pending',
     '/MFA/',
     '/%6dfa',
     '/jobs/../mfa',
@@ -38,8 +39,8 @@ test('anonymous and incomplete sessions cannot access hiring routes', () => {
     '/login?returnTo=%2Fjobs%2F123'
   );
   assert.equal(
-    sessionDestination({ ...session, state: 'email_verification_required' }),
-    '/verify-email'
+    sessionDestination({ ...session, state: 'email_verification_required' }, '/jobs/123'),
+    '/verify-email/pending?returnTo=%2Fjobs%2F123'
   );
   assert.equal(
     sessionDestination({ ...session, state: 'mfa_challenge_required' }),

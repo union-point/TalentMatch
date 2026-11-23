@@ -8,6 +8,8 @@ import { Dashboard } from '@/pages/dashboard';
 import { JobsList } from '@/pages/jobs-list';
 import { CandidateList } from '@/pages/candidate-list';
 import { AuthForm } from '@/pages/auth-forms';
+import { EmailVerification, PendingVerification } from '@/pages/email-verification';
+import { pendingVerificationPath, verificationPath } from '@/lib/auth-navigation';
 import { MfaPage } from '@/pages/mfa';
 import { Account } from '@/pages/account';
 import { OrganizationPage } from '@/pages/organization';
@@ -32,9 +34,10 @@ function App() {
               element={<AuthForm key="signup" mode="signup" />}
             />
             <Route
-              path="/verify-email"
-              element={<AuthForm key="verify" mode="verify-email" />}
+              path={verificationPath}
+              element={<EmailVerification />}
             />
+            <Route path={pendingVerificationPath} element={<PendingVerification />} />
             <Route
               path="/forgot-password"
               element={<AuthForm key="forgot" mode="forgot-password" />}

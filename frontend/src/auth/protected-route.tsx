@@ -34,7 +34,8 @@ export function ProtectedRoute({
     session?.state !== 'authenticated' ||
     (organization && (!session.organization || session.organization.locked))
   ) {
-    return <Navigate to={destination} replace />;
+    return <Navigate to={destination} replace
+      state={session?.state === 'email_verification_required' ? { email: session.user?.email } : undefined} />;
   }
   return <Outlet />;
 }
