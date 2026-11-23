@@ -2,21 +2,20 @@
 
 ## General Rules
 
-- Never rewrite existing architecture without explicit instruction.
-- Follow Clean Architecture.
+- Preserve the existing architecture unless explicitly instructed otherwise.
+- Keep modules small and focused.
+- Avoid unnecessary abstractions.
+- Follow established project conventions.
+
+## Backend Rules
+
+These rules apply to Python backend code, migrations, and backend tests.
+- Follow the existing Clean Architecture.
 - Use FastAPI.
 - Use uv for package management.
-- Keep modules small.
-- Write type hints everywhere.
-- Avoid unnecessary abstractions.
-
-## Coding Style
-
-- Python 3.13
-- Ruff
-- Black
-- mypy compatible
-
+- Use Python 3.13.
+- Use type hints consistently.
+- Follow the project's Ruff, Black, mypy and make configurations.
 
 ## Git Commit Guidelines
 

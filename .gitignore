@@ -168,3 +168,4 @@ playwright-report/
 test-results/
 blob-report/
 .cache/
+/rewiev.md
