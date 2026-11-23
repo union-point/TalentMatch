@@ -35,25 +35,55 @@ Domain has zero framework imports. Ports (`AIService`, `FileParser`, `FileStorag
 ### Prerequisites
 
 - Docker & Docker Compose
-- [uv](https://docs.astral.sh/uv/) (local backend without full Docker)
+- Python 3 to generate a development encryption key
+- [uv](https://docs.astral.sh/uv/) if running the backend on the host
 - Node 20+ (frontend)
 - Gemini API key (or OpenAI-compatible key)
 
-### Docker (API + worker + deps)
+### Configure `.env`
+
+From the project root, copy `.env.example` to `.env` if you don't already have
+one. For Gemini in both analysis modes, set `GEMINI_API_KEY` and
+`AI_DEEP_ANALYSIS_PROVIDER=gemini`. See [Configuration](#configuration) for
+OpenAI-compatible settings.
+
+For a new setup, run the command below and replace `AUTH_ENCRYPTION_KEYS=[]` in
+`.env` with the generated line. Reuse your existing key if you already have one.
 
 ```bash
-cp .env.example .env
-# set GEMINI_API_KEY in .env
-
-make build          # build images, start postgres/redis/app/worker
-make migrate        # alembic upgrade head
+python3 -c 'import base64, json, secrets; print("AUTH_ENCRYPTION_KEYS=" + json.dumps([base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()]))'
 ```
+
+### Docker backend
+
+Compose runs FastAPI (`app`), the Celery worker, Celery beat, Postgres, Redis,
+and Mailpit. Set the following URLs in `.env` if you're using the default Compose
+database credentials.
+
+```env
+DATABASE_URL=postgresql+asyncpg://talentmatch_user:talentmatch_pass@postgres:5432/talentmatch_db
+REDIS_URL=redis://redis:6379/0
+```
+
+Compose sets the SMTP address to `mailpit:1025`. Keep
+`PUBLIC_ORIGIN=http://localhost:5173` for the Vite frontend.
+
+```bash
+make up             # docker compose up -d
+make migrate        # apply migrations inside the app container
+```
+
+`make up` builds missing backend images and reuses existing ones. Use
+`make build` after changing the Dockerfile or backend dependencies, or when you
+want to rebuild the images. It runs `docker compose up -d --build`, which builds
+and starts the services in one step.
 
 | Service | URL |
 |---------|-----|
 | API | http://localhost:8000 |
 | OpenAPI docs | http://localhost:8000/docs |
 | Health | `GET /health` → `{"status":"ok"}` |
+| Mailpit inbox | http://localhost:8026 |
 
 ### Frontend
 
@@ -63,21 +93,27 @@ npm install
 npm run dev         # http://localhost:5173 — proxies /api → :8000
 ```
 
-### Local API (infra in Docker)
+### Local backend (Postgres, Redis, and Mailpit in Docker)
+
+Use this workflow to run and debug the Python processes on your machine. Use the
+`localhost` database, Redis, and SMTP addresses from `.env.example`. Compose
+starts the dependencies, and you start FastAPI, the worker, and beat on the host.
+In `.env`, quote the display name and address together as
+`SMTP_FROM="TalentMatch <no-reply@localhost>"` so `uv --env-file` can parse it.
 
 ```bash
-docker compose up -d postgres redis
-cp .env.example .env   # DATABASE_URL/REDIS_URL point at localhost
-
+docker compose up -d --wait postgres redis mailpit
 uv sync
-uv run alembic upgrade head
-make dev               # uvicorn --reload :8000
+uv run --env-file .env alembic upgrade head
+make dev
 
-# separate terminal — required for deep analysis
+# In separate terminals from the project root
 uv run celery -A app.tasks.celery_app:celery_app worker --loglevel=info
-# In another terminal:
 uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info
 ```
+
+Both Celery processes are needed for verification emails and deep analysis.
+Start the [frontend](#frontend) the same way for either backend workflow.
 
 ## Configuration
 
@@ -91,10 +127,10 @@ uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info
 | `LOG_LEVEL` | no | Default `INFO` |
 | `AI_FAST_TRACK_PROVIDER` | no | `gemini` (default) or `openai` |
 | `AI_FAST_TRACK_MODEL` | no | Default `gemini-3.1-flash-lite` |
-| `AI_DEEP_ANALYSIS_PROVIDER` | no | `gemini` or `openai` |
+| `AI_DEEP_ANALYSIS_PROVIDER` | no | `openai` (default) or `gemini` |
 | `AI_DEEP_ANALYSIS_MODEL` | no | Default `gemini-3.1-flash-lite` |
 | `OPENAI_API_KEY` | if openai | — |
-| `OPENAI_BASE_URL` | no | Default `https://api.openai.com/v1` |
+| `OPENAI_BASE_URL` | no | Default `http://host.docker.internal:8080/v1`. Set a URL reachable from the API for fast-track and from the worker for deep analysis. |
 
 OpenAI-compatible example:
 
@@ -102,6 +138,7 @@ OpenAI-compatible example:
 AI_FAST_TRACK_PROVIDER=openai
 AI_FAST_TRACK_MODEL=gpt-4o-mini
 OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.openai.com/v1
 ```
 
 ## API
@@ -231,33 +268,15 @@ Owners must enroll an authenticator app; MFA is optional for members. Both roles
 can use all hiring features. Owners manage invitations and member removal.
 Each account belongs to at most one organization.
 
-Before starting the API or workers, generate an encryption key:
-
-```bash
-uv run python -c 'import json; from cryptography.fernet import Fernet; print("AUTH_ENCRYPTION_KEYS=" + json.dumps([Fernet.generate_key().decode()]))'
-```
-
-Replace `AUTH_ENCRYPTION_KEYS=[]` in `.env` with the generated line. Keep this key
-outside version control and back it up securely: it encrypts authenticator secrets
-and queued email links. All API and worker processes must use the same keys.
+Keep the encryption key you generated in [Quick start](#configure-env) outside
+version control and back it up securely. It encrypts authenticator secrets and
+queued email links. All API and worker processes must use the same keys.
 Multiple keys are supported, newest first; retain older keys while stored secrets
 still use them. Do not change keys without preserving decryptability.
 
-For local development, use the settings in `.env.example` and start the mail sink:
-
-```bash
-docker compose up -d postgres redis mailpit
-uv run alembic upgrade head
-make dev
-# Separate terminals:
-uv run celery -A app.tasks.celery_app:celery_app worker --loglevel=info
-uv run celery -A app.tasks.celery_app:celery_app beat --loglevel=info
-cd frontend && npm install && npm run dev
-```
-
-Open the UI at `http://localhost:5173` and the local mail inbox at
-`http://localhost:8026`. Local API processes send to `localhost:1026`; Docker
-app/worker processes use `mailpit:1025`. Authentication email is committed to an
+Both [startup workflows](#quick-start) use the Mailpit inbox at
+`http://localhost:8026`. Host processes use SMTP at `localhost:1026`, and
+containers use `mailpit:1025`. Authentication email is committed to an
 encrypted outbox, then delivered by Celery beat/worker every 15 seconds. Failed
 SMTP deliveries retry with exponential delays, up to five attempts. After delivery,
 expiry, or exhausting retries, the queued payload is erased. Users may request a
