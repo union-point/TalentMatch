@@ -41,7 +41,7 @@ class IngestionService:
         title: str,
         company: str,
     ) -> IngestionResponse:
-        parser = get_parser_for_file(filename)
+        parser = get_parser_for_file(filename, allow_plain_text=True)
         stored_path = await self._file_storage.save(file_content, filename, "jds")
 
         stored_paths.append(stored_path)
