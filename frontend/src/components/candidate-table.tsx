@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowUpDown, Search, Eye } from 'lucide-react';
-import type { RankedCandidateSchema } from '@/types';
+import { Link, useLocation } from 'react-router-dom';
+import { ArrowUpDown, Search, ArrowUpRight, Files } from 'lucide-react';
 import { useCandidates } from '@/hooks/use-candidates';
 import {
   Table,
@@ -32,14 +31,14 @@ type SortDir = 'asc' | 'desc';
 type FilterValue = 'all' | 'pass' | 'fail';
 
 export function CandidateTable({ jdId }: CandidateTableProps) {
-  const navigate = useNavigate();
+  const { pathname } = useLocation();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterValue>('all');
   const [sortKey, setSortKey] = useState<SortKey>('score');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const [page, setPage] = useState(1);
-  const { data, isLoading, isFetching, error } = useCandidates({
+  const { data, isLoading, isFetching, error, refetch } = useCandidates({
     jdId, page, pageSize: 20, q: search, status: filter,
     sortBy: sortKey, sortDirection: sortDir,
   });
@@ -55,14 +54,10 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
     }
   }
 
-  function handleView(candidate: RankedCandidateSchema) {
-    if (!jdId) return;
-    navigate(`/candidates/${candidate.resume_id}/job/${jdId}`);
-  }
-
   if (!jdId) {
     return (
-      <div className="flex flex-col items-center justify-center py-12 text-center">
+      <div className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed bg-background px-4 py-10 text-center">
+        <Files size={25} strokeWidth={1.25} />
         <p className="text-sm text-muted-foreground">
           Select a job description to view candidates
         </p>
@@ -95,12 +90,12 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
         </Select>
       </div>
 
-      {error && <p role="alert" className="text-sm text-destructive">{error.message}</p>}
+      {error && <p role="alert" className="text-sm">{error.message} <button className="text-link" onClick={() => void refetch()}>Retry</button></p>}
       {isFetching && <p role="status" className="text-sm text-muted-foreground">Loading candidates...</p>}
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>
+            <TableHead aria-sort={sortKey === 'candidate_name' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <button
                 onClick={() => toggleSort('candidate_name')}
                 className="inline-flex items-center gap-1 font-medium"
@@ -109,7 +104,7 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
                 <ArrowUpDown className="h-3 w-3" />
               </button>
             </TableHead>
-            <TableHead>
+            <TableHead aria-sort={sortKey === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <button
                 onClick={() => toggleSort('score')}
                 className="inline-flex items-center gap-1 font-medium"
@@ -118,7 +113,7 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
                 <ArrowUpDown className="h-3 w-3" />
               </button>
             </TableHead>
-            <TableHead>
+            <TableHead aria-sort={sortKey === 'pass_fail' ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}>
               <button
                 onClick={() => toggleSort('pass_fail')}
                 className="inline-flex items-center gap-1 font-medium"
@@ -128,7 +123,7 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
               </button>
             </TableHead>
             <TableHead className="hidden md:table-cell">Explanation</TableHead>
-            <TableHead className="w-16" />
+            <TableHead className="w-16"><span className="sr-only">View candidate</span></TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -137,13 +132,13 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
               <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                 {search || filter !== 'all'
                   ? 'No candidates match your search.'
-                  : 'No candidates yet. Upload resumes and run analysis.'}
+                  : 'No candidates yet. Upload résumés and analyze your selection.'}
               </TableCell>
             </TableRow>
           )}
           {candidates.map((candidate) => (
             <TableRow key={candidate.resume_id}>
-              <TableCell className="font-medium">
+              <TableCell className="max-w-48 truncate font-medium" title={candidate.candidate_name ?? undefined}>
                 {candidate.candidate_name ?? 'Unknown'}
               </TableCell>
               <TableCell>
@@ -156,20 +151,20 @@ export function CandidateTable({ jdId }: CandidateTableProps) {
                 {candidate.explanation}
               </TableCell>
               <TableCell>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => handleView(candidate)}
+                <Link
+                  to={`/candidates/${candidate.resume_id}/job/${jdId}`}
+                  state={{ fromDashboard: pathname === '/' }}
                   aria-label={`View ${candidate.candidate_name ?? 'candidate'}`}
+                  className="icon-action"
                 >
-                  <Eye className="h-4 w-4" />
-                </Button>
+                  <ArrowUpRight size={16} />
+                </Link>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground" aria-live="polite">
           {data ? `${data.total} candidates · Page ${page} of ${Math.max(1, data.pages)}` : ''}
         </p>

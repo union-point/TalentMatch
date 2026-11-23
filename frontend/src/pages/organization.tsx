@@ -153,6 +153,7 @@ export function OrganizationPage() {
           </section>
           <section className="settings-section space-y-4">
             <h2 className="font-semibold">Pending invitations</h2>
+            {invitations.isPending && <p role="status">Loading invitations…</p>}
             {invitations.error && (
               <p role="alert">{invitations.error.message}</p>
             )}

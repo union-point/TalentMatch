@@ -38,7 +38,7 @@ export function UnscoredResumes({ jdId }: { jdId: string }) {
       <CardHeader>
         <CardTitle>Unscored resumes</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Resumes in your organization with no score for this job. Uploads remain here after refresh.
+          Select résumés to score against this job description.
         </p>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -74,7 +74,7 @@ export function UnscoredResumes({ jdId }: { jdId: string }) {
                 <span className="min-w-0 flex-1 truncate">
                   {item.filename}{item.candidate_name ? ` — ${item.candidate_name}` : ''}
                 </span>
-                {!item.injection_scan_passed && <span className="text-orange-600">Injection warning</span>}
+                {!item.injection_scan_passed && <span className="text-foreground">Injection warning</span>}
               </label>
             ))}
           </fieldset>
@@ -84,7 +84,7 @@ export function UnscoredResumes({ jdId }: { jdId: string }) {
             onClick={analyze}>
             {analysis.isPending ? 'Analyzing...' : `Analyze selected (${selectedIds.length})`}
           </Button>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground" aria-live="polite">
               {data ? `${data.total} unscored · Page ${page} of ${Math.max(1, data.pages)}` : ''}
             </span>

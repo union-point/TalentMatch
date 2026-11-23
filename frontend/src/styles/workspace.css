@@ -61,3 +61,9 @@
   .dashboard-cover::before { opacity: .32; }
   .job-row { padding: 16px 12px; gap: 10px; }
 }
+.back-link { display: inline-flex; align-items: center; gap: 8px; min-height: 32px; color: var(--color-muted-foreground); font-size: .85rem; }
+.back-link:hover { color: var(--color-foreground); }
+.review-intake { display: grid; align-items: start; gap: 24px; }
+@media (min-width: 1280px) {
+  .review-intake { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
+}

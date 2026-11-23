@@ -1,7 +1,6 @@
 import { useState, useRef, useCallback, type DragEvent } from 'react';
 import { Upload, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
 
 interface ResumeDropzoneProps {
   onUpload: (files: File[]) => void;
@@ -71,6 +70,7 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
       e.stopPropagation();
       setIsDragging(false);
 
+      if (isUploading) return;
       const items = Array.from(e.dataTransfer.items);
       if (items.length > 0 && items[0].webkitGetAsEntry !== undefined) {
         const files: File[] = [];
@@ -84,11 +84,11 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
         if (files.length > 0) onUpload(files);
       }
     },
-    [onUpload],
+    [isUploading, onUpload],
   );
 
   function handleFileSelect() {
-    fileRef.current?.click();
+    if (!isUploading) fileRef.current?.click();
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -103,17 +103,18 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
       className={cn(
-        'flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors',
+        'flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed bg-background p-6 transition-colors',
         isDragging
           ? 'border-primary bg-primary/5'
           : 'border-muted-foreground/25 hover:border-muted-foreground/50',
         isUploading && 'pointer-events-none opacity-50'
       )}
+      aria-disabled={isUploading}
       onClick={handleFileSelect}
       role="button"
-      tabIndex={0}
+      tabIndex={isUploading ? -1 : 0}
       onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') handleFileSelect();
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleFileSelect(); }
       }}
     >
       <input
@@ -135,11 +136,11 @@ export function ResumeDropzone({ onUpload, isUploading }: ResumeDropzoneProps) {
         {isDragging ? 'Drop files or folders here' : 'Drag & drop resumes or folders here'}
       </p>
       <p className="mb-4 text-xs text-muted-foreground">
-        or click to browse — PDF, DOCX, HTML
+        PDF, DOCX or HTML
       </p>
-      <Button type="button" variant="secondary" size="sm" disabled={isUploading}>
+      <span className="rounded-md border bg-card px-3 py-2 text-xs font-medium">
         {isUploading ? 'Uploading...' : 'Select Files'}
-      </Button>
+      </span>
     </div>
   );
 }

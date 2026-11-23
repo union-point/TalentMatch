@@ -29,7 +29,7 @@ export function DeepAnalysisStatus({ status }: DeepAnalysisStatusProps) {
 
   if (status === 'completed') {
     return (
-      <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+      <div className="flex items-center gap-2 text-foreground">
         <CheckCircle2 className="h-4 w-4" />
         <span className="text-sm font-medium">Completed</span>
       </div>
@@ -38,7 +38,7 @@ export function DeepAnalysisStatus({ status }: DeepAnalysisStatusProps) {
 
   if (status === 'failed') {
     return (
-      <div className="flex items-center gap-2 text-red-600 dark:text-red-400">
+      <div className="flex items-center gap-2 text-foreground">
         <AlertCircle className="h-4 w-4" />
         <span className="text-sm font-medium">Failed</span>
       </div>

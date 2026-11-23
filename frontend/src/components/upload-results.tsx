@@ -11,12 +11,12 @@ export function UploadResults({ result }: UploadResultsProps) {
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3 text-sm">
-        <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+        <span className="flex items-center gap-1 text-foreground">
           <CheckCircle className="h-4 w-4" />
           {result.succeeded} succeeded
         </span>
         {result.failed > 0 && (
-          <span className="flex items-center gap-1 text-red-600 dark:text-red-400">
+          <span className="flex items-center gap-1 text-foreground">
             <XCircle className="h-4 w-4" />
             {result.failed} failed
           </span>
@@ -39,7 +39,7 @@ export function UploadResults({ result }: UploadResultsProps) {
               <span className="flex-1 truncate">{resume.filename}</span>
               <span className="text-xs text-muted-foreground">{resume.file_type}</span>
               {hasWarning && (
-                <span className="inline-flex items-center gap-1 text-xs text-orange-600 dark:text-orange-400">
+                <span className="inline-flex items-center gap-1 text-xs text-foreground">
                   <AlertTriangle className="h-3 w-3" />
                   Injection {scan.suspicion_score != null ? `(${scan.suspicion_score})` : 'warning'}
                 </span>

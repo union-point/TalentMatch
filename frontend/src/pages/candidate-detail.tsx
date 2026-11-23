@@ -1,5 +1,5 @@
-import { useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { lazy, Suspense, useCallback } from 'react';
+import { Link, useLocation, useParams } from 'react-router-dom';
 import { ArrowLeft, Loader2, Brain, ShieldAlert, ShieldCheck, FileText, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -7,10 +7,11 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { FastTrackCard } from '@/components/fast-track-card';
 import { DeepAnalysisPanel } from '@/components/deep-analysis-panel';
-import { ResumeViewer } from '@/components/resume-viewer';
 import { useCandidateDetail } from '@/hooks/use-candidate-detail';
 import { useDeepAnalysisMutation, useDeepAnalysisPolling } from '@/hooks/use-deep-analysis';
 import type { DeepAnalysisResultSchema } from '@/types';
+
+const ResumeViewer = lazy(() => import('@/components/resume-viewer').then((module) => ({ default: module.ResumeViewer })));
 
 export function CandidateDetail() {
   const { resumeId, jdId } = useParams<{ resumeId: string; jdId: string }>();
@@ -18,9 +19,12 @@ export function CandidateDetail() {
 }
 
 function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: string }) {
-  const navigate = useNavigate();
+  const { state } = useLocation();
+  const jobsPath = jdId ? '/jobs/' + jdId : '/jobs';
+  const backPath = jdId && state?.fromDashboard ? '/?jd=' + encodeURIComponent(jdId) : jobsPath;
+  const backLabel = state?.fromDashboard ? 'Back to dashboard' : 'Back to job';
 
-  const { data: detail, isLoading } = useCandidateDetail({
+  const { data: detail, isLoading, error, refetch } = useCandidateDetail({
     resumeId: resumeId ?? '',
     jdId: jdId ?? '',
   });
@@ -41,16 +45,12 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
     });
   }, [resumeId, jdId, deepAnalysisMutation]);
 
-  const analysisResult: DeepAnalysisResultSchema | undefined =
-    pollQuery.data ??
-    (detail?.deep_analysis?.status === 'completed' || detail?.deep_analysis?.status === 'failed'
-      ? (detail.deep_analysis as DeepAnalysisResultSchema)
-      : undefined);
+  const analysisResult: DeepAnalysisResultSchema | undefined = pollQuery.data ?? analysis ?? undefined;
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div role="status" className="flex items-center justify-center gap-2 py-20 text-sm text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Loading candidate…
       </div>
     );
   }
@@ -58,12 +58,9 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
   if (!detail) {
     return (
       <div className="space-y-4">
-        <Button variant="ghost" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
+        <Link className="back-link" to={backPath}><ArrowLeft size={15} />{backLabel}</Link>
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <p className="text-muted-foreground">Candidate not found.</p>
+          {error ? <div role="alert">{error.message} <Button variant="outline" onClick={() => void refetch()}>Retry</Button></div> : <p>Candidate not found.</p>}
         </div>
       </div>
     );
@@ -71,17 +68,14 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
 
   return (
     <div className="min-w-0 max-w-full space-y-6">
-      <Button variant="ghost" onClick={() => navigate(-1)}>
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </Button>
+      <Link className="back-link" to={backPath}><ArrowLeft size={15} />{backLabel}</Link>
 
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="text-3xl font-bold">
             {detail.candidate_name ?? 'Unknown Candidate'}
           </h1>
-          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             {detail.email && (
               <span className="flex items-center gap-1">
                 <Mail className="h-4 w-4" />
@@ -96,12 +90,12 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
         </div>
         <div className="flex items-center gap-2">
           {detail.injection_scan_passed ? (
-            <Badge variant="outline" className="border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400">
+            <Badge variant="outline" className="border-border bg-muted text-foreground">
               <ShieldCheck className="mr-1 h-3 w-3" />
               Scan Passed
             </Badge>
           ) : (
-            <Badge variant="outline" className="border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400">
+            <Badge variant="outline" className="border-border bg-muted text-foreground">
               <ShieldAlert className="mr-1 h-3 w-3" />
               Injection Warning
             </Badge>
@@ -114,7 +108,7 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
       {detail.fast_track && <FastTrackCard fastTrack={detail.fast_track} />}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Brain className="h-5 w-5 text-primary" />
             Deep Analysis
@@ -132,11 +126,13 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
           </Button>
         </CardHeader>
         <CardContent>
+          {deepAnalysisMutation.error && <p role="alert">{deepAnalysisMutation.error.message}</p>}
+          {pollQuery.error && <p role="alert">{pollQuery.error.message} <button className="text-link" onClick={() => void pollQuery.refetch()}>Retry</button></p>}
           <DeepAnalysisPanel
             analysisResult={analysisResult}
             isLoading={deepAnalysisMutation.isPending && !pollQuery.data}
           />
-          {!analysisResult && !deepAnalysisMutation.isPending && (
+          {!analysisResult && !hasAnalysisInProgress && !deepAnalysisMutation.isPending && (
             <p className="py-8 text-center text-sm text-muted-foreground">
               No deep analysis yet. Click &quot;Run Deep Analysis&quot; to start.
             </p>
@@ -152,11 +148,13 @@ function CandidateDetailContent({ resumeId, jdId }: { resumeId?: string; jdId?: 
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ResumeViewer
-            resumeId={resumeId ?? ''}
-            fileType={detail.file_type}
-            filename={detail.filename}
-          />
+          <Suspense fallback={<p role="status">Loading résumé…</p>}>
+            <ResumeViewer
+              resumeId={resumeId ?? ''}
+              fileType={detail.file_type}
+              filename={detail.filename}
+            />
+          </Suspense>
         </CardContent>
       </Card>
     </div>

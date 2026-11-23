@@ -1,6 +1,5 @@
 import { Target } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
-import { ScoreBadge } from '@/components/score-badge';
 import { StatusBadge } from '@/components/status-badge';
 import type { FastTrackSummarySchema } from '@/types';
 
@@ -18,16 +17,12 @@ export function FastTrackCard({ fastTrack }: FastTrackCardProps) {
         </CardTitle>
         <StatusBadge pass={fastTrack.pass_fail} />
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-center">
-            <span className="text-sm text-muted-foreground">Score</span>
-            <ScoreBadge score={fastTrack.score} />
-          </div>
+      <CardContent className="grid items-center gap-5 sm:grid-cols-[auto_minmax(0,1fr)]">
+        <div className="rounded-md bg-primary px-6 py-4 text-primary-foreground">
+          <span className="block text-xs">Match score</span>
+          <span className="font-heading text-5xl">{fastTrack.score}</span><span className="ml-1 text-xs">/ 100</span>
         </div>
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          {fastTrack.explanation}
-        </p>
+        <p className="max-w-prose text-sm leading-relaxed">{fastTrack.explanation}</p>
       </CardContent>
     </Card>
   );

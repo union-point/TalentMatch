@@ -1,17 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
-import {
-  FileText,
-  Download,
-  Loader2,
-  AlertCircle,
-  ZoomIn,
-  ZoomOut,
-  Maximize2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { FileText } from 'lucide-react';
+import { DEFAULT_SCALE, MAX_SCALE, MIN_SCALE, PdfError, PdfSkeleton, ResumeDownload, ZoomControls } from '@/components/resume-preview-controls';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -26,104 +17,10 @@ interface ResumeViewerProps {
 
 const BASE_URL = '/api';
 const PAGE_PADDING = 32;
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 2.5;
 const SCALE_STEP = 0.25;
-const DEFAULT_SCALE = 1;
 
 function clampScale(value: number): number {
   return Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.round(value * 100) / 100));
-}
-
-function PdfSkeleton() {
-  return (
-    <div className="flex h-[min(60vh,520px)] flex-col items-center justify-center gap-3">
-      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      <p className="text-sm text-muted-foreground">Loading PDF…</p>
-    </div>
-  );
-}
-
-function PdfError({ fileUrl, filename }: { fileUrl: string; filename: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-      <AlertCircle className="h-8 w-8 text-destructive" />
-      <div className="space-y-1">
-        <p className="text-sm font-medium">Could not load PDF preview</p>
-        <p className="text-xs text-muted-foreground">
-          The file may be unavailable or corrupted.
-        </p>
-      </div>
-      <Button variant="outline" size="sm" render={<a href={fileUrl} download={filename} />}>
-        <Download className="h-4 w-4" />
-        Download PDF
-      </Button>
-    </div>
-  );
-}
-
-function ZoomControls({
-  scale,
-  onZoomIn,
-  onZoomOut,
-  onReset,
-}: {
-  scale: number;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
-  onReset: () => void;
-}) {
-  const percent = Math.round(scale * 100);
-
-  return (
-    <div className="flex shrink-0 items-center gap-0.5 rounded-md border bg-background p-0.5">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        onClick={onZoomOut}
-        disabled={scale <= MIN_SCALE}
-        aria-label="Zoom out"
-      >
-        <ZoomOut />
-      </Button>
-      <button
-        type="button"
-        onClick={onReset}
-        className={cn(
-          'min-w-12 rounded-md px-1 py-0.5 text-center text-xs font-medium tabular-nums',
-          'text-muted-foreground transition-colors hover:bg-muted hover:text-foreground',
-          'disabled:pointer-events-none disabled:opacity-50',
-        )}
-        disabled={scale === DEFAULT_SCALE}
-        aria-label="Reset zoom"
-        title="Reset zoom"
-      >
-        {percent}%
-      </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        onClick={onZoomIn}
-        disabled={scale >= MAX_SCALE}
-        aria-label="Zoom in"
-      >
-        <ZoomIn />
-      </Button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        onClick={onReset}
-        disabled={scale === DEFAULT_SCALE}
-        aria-label="Fit to width"
-        title="Fit to width"
-      >
-        <Maximize2 />
-      </Button>
-    </div>
-  );
 }
 
 function PdfDocument({ fileUrl, filename }: { fileUrl: string; filename: string }) {
@@ -316,7 +213,7 @@ function PdfDocument({ fileUrl, filename }: { fileUrl: string; filename: string 
 
   return (
     <div ref={shellRef} className="w-full min-w-0 max-w-full space-y-2">
-      <div className="flex min-w-0 items-center gap-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-sm text-muted-foreground">
           <FileText className="h-4 w-4 shrink-0" />
           <span className="truncate">{filename}</span>
@@ -327,15 +224,7 @@ function PdfDocument({ fileUrl, filename }: { fileUrl: string; filename: string 
           onZoomOut={zoomOut}
           onReset={resetZoom}
         />
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          render={<a href={fileUrl} download={filename} />}
-        >
-          <Download className="h-4 w-4" />
-          Download
-        </Button>
+        <ResumeDownload fileUrl={fileUrl} filename={filename} />
       </div>
       <div
         ref={scrollerRef}
@@ -369,7 +258,7 @@ export function ResumeViewer({ resumeId, fileType, filename }: ResumeViewerProps
   }
 
   return (
-    <div className="flex items-center justify-between rounded-lg border p-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-4">
       <div className="flex items-center gap-3">
         <FileText className="h-5 w-5 text-muted-foreground" />
         <div>
@@ -377,10 +266,7 @@ export function ResumeViewer({ resumeId, fileType, filename }: ResumeViewerProps
           <p className="text-xs text-muted-foreground">{fileType}</p>
         </div>
       </div>
-      <Button variant="outline" size="sm" render={<a href={fileUrl} download={filename} />}>
-        <Download className="h-4 w-4" />
-        Download
-      </Button>
+      <ResumeDownload fileUrl={fileUrl} filename={filename} />
     </div>
   );
 }
