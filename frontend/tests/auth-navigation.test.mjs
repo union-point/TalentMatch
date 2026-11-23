@@ -20,6 +20,9 @@ test('return destinations only accept internal application URLs', () => {
     '/\\evil.example',
     '/login',
     '/mfa',
+    '/MFA/',
+    '/%6dfa',
+    '/jobs/../mfa',
     '/ bad',
     '/\t/evil',
     'javascript:alert(1)',
@@ -39,13 +42,6 @@ test('anonymous and incomplete sessions cannot access hiring routes', () => {
     '/verify-email'
   );
   assert.equal(
-    sessionDestination(
-      { ...session, state: 'mfa_enrollment_required' },
-      '/jobs'
-    ),
-    '/mfa?returnTo=%2Fjobs'
-  );
-  assert.equal(
     sessionDestination({ ...session, state: 'mfa_challenge_required' }),
     '/mfa?returnTo=%2F'
   );
@@ -63,7 +59,10 @@ test('organization-less and locked memberships lead to account settings', () => 
     }),
     '/account'
   );
-  assert.equal(sessionDestination(session, '/jobs'), '/jobs');
+  assert.equal(
+    sessionDestination({ ...session, mfa_enabled: false }, '/jobs'),
+    '/jobs'
+  );
 });
 
 test('a signed-in user without membership can return to an invitation', () => {

@@ -264,8 +264,9 @@ are rejected instead of scoring partial text.
 The browser UI and `/api` must share one public origin. Local Vite already proxies
 `/api` to FastAPI. All hiring endpoints, including resume downloads, require a
 verified account with an active organization membership and completed sign-in.
-Owners must enroll an authenticator app; MFA is optional for members. Both roles
-can use all hiring features. Owners manage invitations and member removal.
+Two-factor authentication is optional for owners and members. Once enabled, sign-in
+requires an authenticator or recovery code. Both roles can use all hiring features.
+Owners manage invitations and member removal.
 Each account belongs to at most one organization.
 
 Keep the encryption key you generated in [Quick start](#configure-env) outside
@@ -282,8 +283,9 @@ SMTP deliveries retry with exponential delays, up to five attempts. After delive
 expiry, or exhausting retries, the queued payload is erased. Users may request a
 fresh verification/reset link; owners may reissue an invitation.
 
-Signup sends a verification link. After verification, sign in, enroll an
-authenticator, and save the ten recovery codes. Invite teammates from
+Signup sends a verification link. After verification, sign in to access your
+workspace. To enable two-factor authentication, open **Settings → Account security**,
+set up an authenticator app, and save the ten recovery codes. Invite teammates from
 **Organization**. Invited new users create a password and join that organization
 without creating another workspace. Existing verified users without a membership
 sign in before accepting. Invitations cannot move an account between organizations.
@@ -293,7 +295,8 @@ a future invitation. Already committed analysis jobs continue for the organizati
 MFA recovery requires an unused recovery code plus the account password. Password
 reset does not remove MFA. **Losing the authenticator and every recovery code means
 losing access. There is no emergency, email-only, or operator MFA reset.** Owners
-cannot disable MFA or remove themselves. Organization switching, ownership transfer,
+and members can disable MFA from Account security with their password and a valid
+second factor. Owners cannot remove themselves. Organization switching, ownership transfer,
 SSO, API bearer tokens, email changes, and account deletion are not implemented.
 
 ### Session API
@@ -310,11 +313,11 @@ No credentials or authentication tokens belong in local storage.
 | GET | `/auth/session` | Bootstrap/inspect session and obtain CSRF token |
 | POST | `/auth/register` | Email, password, organization name |
 | POST | `/auth/verify-email`, `/auth/resend-verification` | Complete/request verification |
-| POST | `/auth/login` | Start password sign-in; may require MFA/enrollment |
+| POST | `/auth/login` | Start password sign-in and challenge accounts with MFA enabled |
 | POST | `/auth/logout`, `/auth/logout-all` | Revoke current/all sessions |
 | POST | `/auth/forgot-password`, `/auth/reset-password` | Email recovery and token-based password change |
 | POST | `/auth/change-password` | Current and new password; revoke other sessions |
-| POST | `/auth/mfa/enroll`, `/auth/mfa/confirm` | Initial enrollment or replacement; show recovery codes once |
+| POST | `/auth/mfa/enroll`, `/auth/mfa/confirm` | Set up or replace MFA from an authenticated session and show recovery codes once |
 | POST | `/auth/mfa/challenge` | Complete sign-in with TOTP/recovery code |
 | POST | `/auth/mfa/recovery-codes`, `/auth/mfa/disable` | Password + current second factor required |
 | POST | `/auth/accept-invitation` | Consume invitation and join the organization |
@@ -365,10 +368,14 @@ accounts cannot claim it. Assign its owner once through an email-bound invitatio
 uv run python -m app.commands.invite_legacy_owner --email owner@example.com
 ```
 
-Use a new account or an existing verified account without a membership. The email
-invitation verifies the new owner's inbox; owner access remains locked until MFA
-is completed. The command refuses already assigned organizations and cannot reset
-an existing owner's access. Failed/expired unaccepted invitations can be reissued.
+Use a new account or an existing verified account without a membership. Accepting
+the email invitation activates the workspace. The command refuses already assigned
+organizations and cannot reset an existing owner's access. Failed or expired
+unaccepted invitations can be reissued.
+
+The optional MFA migration activates legacy workspaces that already have a verified
+owner. It also expires sessions that were waiting for mandatory enrollment so those
+users can sign in again.
 
 Monitor HTTP authentication errors/429s, Redis availability, and worker email
 failures. Email logs contain outbox IDs, attempt counts, and exception types,

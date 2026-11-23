@@ -21,7 +21,7 @@ async function mockApi(page: Page, initial = 'anonymous') {
     phase: initial,
     email: owner.email,
     role: 'owner',
-    mfa: initial === 'authenticated',
+    mfa: initial === 'mfa_challenge_required',
     jobReads: 0,
     mutations: [] as string[],
   };
@@ -71,9 +71,7 @@ async function mockApi(page: Page, initial = 'anonymous') {
       return json({ detail: 'Email verified. Sign in to continue.' });
     if (path === 'auth/login') {
       state.email = body.email;
-      state.phase = state.email.startsWith('member')
-        ? 'authenticated'
-        : 'mfa_enrollment_required';
+      state.phase = state.mfa ? 'mfa_challenge_required' : 'authenticated';
       state.role = state.email.startsWith('member') ? 'member' : 'owner';
       return json(session());
     }
@@ -89,6 +87,10 @@ async function mockApi(page: Page, initial = 'anonymous') {
     }
     if (path === 'auth/mfa/challenge') {
       state.phase = 'authenticated';
+      return json(session());
+    }
+    if (path === 'auth/mfa/disable') {
+      state.mfa = false;
       return json(session());
     }
     if (path === 'auth/accept-invitation') {
@@ -152,7 +154,7 @@ async function login(page: Page, email: string) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 
-test('owner signup, email confirmation, MFA setup, recovery-code acknowledgment, and signout', async ({
+test('owner signs in without MFA and can enable it from Account security', async ({
   page,
 }) => {
   const state = await mockApi(page);
@@ -168,17 +170,27 @@ test('owner signup, email confirmation, MFA setup, recovery-code acknowledgment,
   expect(page.url()).not.toContain('token');
   await page.getByRole('link', { name: 'Sign in', exact: true }).click();
   await login(page, owner.email);
+  await expect(page.getByRole('heading', { name: 'Dashboard' })).toBeVisible();
+  await page.goto('/mfa?returnTo=%2FMFA%2F');
+  await expect(page).toHaveURL('http://127.0.0.1:4174/');
   await expect(
-    page.getByRole('heading', { name: 'Protect your owner account' })
-  ).toBeVisible();
-  expect(state.jobReads).toBe(0);
-  await page.getByLabel('Current password').fill(password);
+    page.getByRole('button', { name: 'Set up authenticator' })
+  ).toHaveCount(0);
+  expect(state.mutations.some((path) => path.startsWith('auth/mfa/'))).toBe(false);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  await page.getByRole('link', { name: 'Account security' }).click();
+  const security = page.getByRole('region', { name: 'Two-factor authentication' });
+  await expect(security.getByText('Off', { exact: true })).toBeVisible();
+  await security.getByRole('button', { name: 'Enable authenticator' }).click();
+  await security.getByLabel('Current password').fill(password);
   await page.getByRole('button', { name: 'Set up authenticator' }).click();
   await expect(
     page.getByAltText('Scan this QR code with your authenticator app')
   ).toBeVisible();
   await page.getByLabel('Authentication code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Confirm authenticator' }).click();
+  await expect(security.getByText('On', { exact: true })).toBeVisible();
   await expect(page.getByLabel('Recovery codes', { exact: true })).toHaveValue(
     codes.join('\n')
   );
@@ -189,10 +201,14 @@ test('owner signup, email confirmation, MFA setup, recovery-code acknowledgment,
   await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
   await page.getByLabel('I saved my recovery codes').check();
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Dashboard', exact: true })
-  ).toBeVisible();
-  await page.getByRole('button', { name: 'Sign out', exact: true }).click();
+  const turnOff = security.getByRole('button', { name: 'Turn off two-factor authentication' });
+  await expect(turnOff).toBeDisabled();
+  await security.getByLabel('Current password').fill(password);
+  await security.getByLabel('Authenticator or recovery code').fill(codes[0]);
+  await turnOff.click();
+  await expect(security.getByText('Off', { exact: true })).toBeVisible();
+  await page.getByRole('main')
+    .getByRole('button', { name: 'Sign out', exact: true }).click();
   await expect(
     page.getByRole('heading', { name: 'Sign in', exact: true })
   ).toBeVisible();

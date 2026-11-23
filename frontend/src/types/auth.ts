@@ -1,7 +1,6 @@
 export type SessionState =
   | 'anonymous'
   | 'email_verification_required'
-  | 'mfa_enrollment_required'
   | 'mfa_challenge_required'
   | 'authenticated';
 

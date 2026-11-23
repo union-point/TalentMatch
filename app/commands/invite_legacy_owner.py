@@ -1,4 +1,4 @@
-"""Assign the locked legacy workspace through a normal email/MFA invitation."""
+"""Assign the locked legacy workspace through an email invitation."""
 
 import argparse
 import asyncio
@@ -30,7 +30,7 @@ def main() -> None:
         asyncio.run(invite(email))
     except (EmailNotValidError, AuthError) as exc:
         parser.exit(1, f"{exc}\n")
-    print("Legacy owner invitation queued. The recipient must verify email and complete MFA setup.")
+    print("Legacy owner invitation queued. The recipient must accept it from their email inbox.")
 
 
 if __name__ == "__main__":

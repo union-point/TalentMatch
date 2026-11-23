@@ -143,11 +143,8 @@ class AuthService:
                 raise AuthError("invalid_credentials", "Email or password is incorrect.", 401)
             if not await self._passwords.verify(password, user.password_hash):
                 raise AuthError("invalid_credentials", "Email or password is incorrect.", 401)
-            membership = await repo.membership(user.id)
             mfa = await repo.mfa(user.id)
-            return await self._sessions.issue(
-                repo, user, login_state(user, membership, mfa), context.session
-            )
+            return await self._sessions.issue(repo, user, login_state(user, mfa), context.session)
 
     async def reset_password(self, raw: str, password: str) -> None:
         async with self._transaction() as repo:

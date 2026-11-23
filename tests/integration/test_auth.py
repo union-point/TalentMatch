@@ -131,7 +131,8 @@ async def owner(
     response = await post(client, "auth/verify-email", {"token": token})
     assert response.status_code == 200, response.text
     response = await post(client, "auth/login", {"email": email, "password": PASSWORD})
-    assert response.json()["state"] == "mfa_enrollment_required", response.text
+    assert response.json()["state"] == "authenticated", response.text
+    assert not response.json()["mfa_enabled"]
     return response.json()
 
 
@@ -158,7 +159,7 @@ async def test_owner_signup_verification_mfa_csrf_and_logout(auth_env: AuthEnv) 
     )
     assert denied.status_code == 403 and denied.json()["title"] == "csrf_failed"
     await owner(client, factory, crypto)
-    assert (await client.get("/api/v1/job-descriptions")).status_code == 403
+    assert (await client.get("/api/v1/job-descriptions")).status_code == 200
     before = client.cookies.get(settings.auth_cookie_name)
     _, codes = await enroll(client, factory, crypto)
     assert len(codes) == 10 and len(set(codes)) == 10
@@ -208,13 +209,13 @@ async def test_mfa_replay_recovery_and_password_reset_preserves_factor(auth_env:
     await post(client, "auth/logout")
     login = await post(client, "auth/login", {"email": "owner@example.com", "password": PASSWORD})
     assert login.json()["state"] == "mfa_challenge_required"
+    assert (await client.get("/api/v1/job-descriptions")).status_code == 403
+    assert (await post(client, "auth/mfa/enroll", {"password": PASSWORD})).status_code == 403
+    assert (await post(client, "auth/mfa/confirm", {"code": "123456"})).status_code == 403
     reused = await post(client, "auth/mfa/challenge", {"code": pyotp.TOTP(secret).now()})
     assert reused.status_code == 401
     response = await post(client, "auth/mfa/challenge", {"code": codes[0]})
     assert response.json()["state"] == "authenticated"
-    assert (
-        await post(client, "auth/mfa/disable", {"password": PASSWORD, "code": codes[1]})
-    ).status_code == 403
     await post(client, "auth/forgot-password", {"email": "owner@example.com"})
     reset = await email_token(factory, crypto, "owner@example.com", "reset-password")
     assert (
@@ -227,6 +228,15 @@ async def test_mfa_replay_recovery_and_password_reset_preserves_factor(auth_env:
     assert login.json()["state"] == "mfa_challenge_required"
     assert (await post(client, "auth/mfa/challenge", {"code": codes[0]})).status_code == 401
     assert (await post(client, "auth/mfa/challenge", {"code": codes[2]})).status_code == 200
+    disable = await post(
+        client, "auth/mfa/disable", {"password": PASSWORD + "new", "code": codes[1]}
+    )
+    assert disable.status_code == 200 and not disable.json()["mfa_enabled"]
+    await post(client, "auth/logout")
+    login = await post(
+        client, "auth/login", {"email": "owner@example.com", "password": PASSWORD + "new"}
+    )
+    assert login.json()["state"] == "authenticated"
 
 
 async def test_invited_member_permissions_revocation_and_optional_mfa(auth_env: AuthEnv) -> None:
@@ -540,7 +550,7 @@ async def test_mfa_concurrent_recovery_and_authenticator_replacement(auth_env: A
         assert hashes == {crypto.digest(code) for code in replacement_codes}
 
 
-async def test_legacy_owner_invitation_requires_mfa_before_unlocking(auth_env: AuthEnv) -> None:
+async def test_legacy_owner_invitation_unlocks_workspace_without_mfa(auth_env: AuthEnv) -> None:
     from app.application.services.auth_sessions import AuthError
     from app.domain.entities.identity import LEGACY_ORGANIZATION_ID
 
@@ -554,10 +564,9 @@ async def test_legacy_owner_invitation_requires_mfa_before_unlocking(auth_env: A
     await services.organizations.invite_legacy_owner("legacy@example.com")
     token = await email_token(factory, crypto, "legacy@example.com", "accept-invitation")
     accepted = await post(client, "auth/accept-invitation", {"token": token, "password": PASSWORD})
-    assert accepted.json()["state"] == "mfa_enrollment_required"
-    assert accepted.json()["organization"]["locked"]
-    assert (await client.get("/api/v1/job-descriptions")).status_code == 403
-    await enroll(client, factory, crypto)
+    assert accepted.json()["state"] == "authenticated"
+    assert not accepted.json()["mfa_enabled"]
+    assert not accepted.json()["organization"]["locked"]
     assert (await client.get("/api/v1/job-descriptions")).status_code == 200
     with pytest.raises(AuthError):
         await services.organizations.invite_legacy_owner("replacement@example.com")

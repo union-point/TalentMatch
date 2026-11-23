@@ -1,42 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/auth/auth-context';
 import { AuthShell } from '@/auth/auth-shell';
-import { MfaEnrollment } from '@/auth/mfa-enrollment';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { fetchPost } from '@/lib/api';
-import { safeReturnTo } from '@/lib/auth-navigation';
+import { safeReturnTo, sessionDestination } from '@/lib/auth-navigation';
 import type { AuthSession } from '@/types/auth';
 
 export function MfaPage() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [enrollmentActive, setEnrollmentActive] = useState(false);
-  useEffect(() => {
-    if (auth.session?.state === 'mfa_enrollment_required')
-      setEnrollmentActive(true);
-  }, [auth.session?.state]);
   const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const returnTo = safeReturnTo(params.get('returnTo'));
-  function complete(session: AuthSession) {
-    auth.update(session);
-    navigate(returnTo, { replace: true });
-  }
   async function challenge(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError('');
     try {
-      complete(
-        await fetchPost<AuthSession>('/v1/auth/mfa/challenge', {
-          code: code.trim(),
-        })
-      );
+      const session = await fetchPost<AuthSession>('/v1/auth/mfa/challenge', {
+        code: code.trim(),
+      });
+      auth.update(session);
+      navigate(sessionDestination(session, returnTo), { replace: true });
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : 'Could not verify the code.'
@@ -52,49 +42,38 @@ export function MfaPage() {
         Checking your session…
       </p>
     );
-  if (auth.session?.state === 'authenticated' && !enrollmentActive)
+  if (auth.session?.state !== 'mfa_challenge_required')
     return (
       <Navigate
-        to={auth.session.organization ? returnTo : '/account'}
+        to={sessionDestination(auth.session, returnTo)}
         replace
       />
     );
-  if (!auth.session?.user) return <Navigate to="/login" replace />;
-  if (auth.session.state === 'email_verification_required')
-    return <Navigate to="/verify-email" replace />;
   return (
     <AuthShell
-      title={
-        auth.session.state === 'mfa_enrollment_required'
-          ? 'Protect your owner account'
-          : 'Verify your sign-in'
-      }
-      description={
-        auth.session.state === 'mfa_enrollment_required'
-          ? 'Organization owners must set up an authenticator before accessing hiring data.'
-          : 'Enter a code from your authenticator app or one unused recovery code.'
-      }
+      title="Verify your sign-in"
+      description="Enter a code from your authenticator app or one unused recovery code."
     >
-      {auth.session.state === 'mfa_enrollment_required' || enrollmentActive ? (
-        <MfaEnrollment replacing={false} onComplete={complete} />
-      ) : (
-        <form onSubmit={challenge} className="space-y-4">
-          <label className="block space-y-1 text-sm">
-            Authenticator or recovery code
-            <Input
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              maxLength={128}
-              required
-            />
-          </label>
-          <Button type="submit" disabled={busy}>
-            {busy ? 'Checking…' : 'Verify'}
-          </Button>
-        </form>
+      <form onSubmit={challenge} className="space-y-4">
+        <label className="block space-y-1 text-sm">
+          Authenticator or recovery code
+          <Input
+            autoComplete="one-time-code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            maxLength={128}
+            required
+          />
+        </label>
+        <Button type="submit" disabled={busy}>
+          {busy ? 'Checking…' : 'Verify'}
+        </Button>
+      </form>
+      {error && (
+        <p role="alert" className="text-sm">
+          {error}
+        </p>
       )}
-      {error && <p role="alert" className="text-sm">{error}</p>}
       <Button
         variant="ghost"
         onClick={() => {
