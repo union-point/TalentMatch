@@ -33,3 +33,14 @@
   .access-footer { min-height: 50px; }
   .access-fields input:not([type="checkbox"]) { font-size: 16px; }
 }
+@media (max-width: 760px) {
+  .access-page[data-entry="true"] .access-main { align-content: center; gap: 8px; }
+  .access-page[data-entry="true"] .access-form { padding: 20px 0 24px; }
+  .access-page[data-entry="true"] .access-art { display: block; width: min(100%, 390px); justify-self: center; min-height: 116px; }
+  .paper-study { width: 70%; right: 0; object-position: center 42%; }
+  .access-art::after { background: linear-gradient(90deg, #0b0b0b 18%, transparent 85%); }
+  .art-caption { bottom: 22px; padding: 0 22px; }
+  .art-caption h2 { margin: 6px 0 0; font-size: 2.1rem; }
+  .art-caption p { display: none; }
+  .art-frame { inset: 10px; }
+}

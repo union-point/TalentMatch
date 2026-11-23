@@ -1,26 +1,26 @@
 import type { ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { ArrowUpRight, LockKeyhole } from 'lucide-react';
 import { Brand } from '@/components/brand';
 
-export function AuthShell({ title, description, children }: {
+export function AuthShell({ title, description, children, accountLink }: {
+  accountLink?: 'login' | 'signup';
   title: string;
   description?: string;
   children: ReactNode;
 }) {
-  const { pathname } = useLocation();
-  const isSignup = pathname === '/signup';
+  const isSignup = accountLink === 'login';
 
   return (
-    <div className="access-page">
+    <div className="access-page" data-entry={accountLink != null}>
       <header className="access-bar">
         <Brand />
-        <div className="flex items-center gap-4 text-sm">
+        {accountLink && <div className="flex items-center gap-4 text-sm">
           <span className="hidden text-muted-foreground sm:inline">{isSignup ? 'Already have an account?' : 'New to TalentMatch?'}</span>
           <Link className="access-link" to={isSignup ? '/login' : '/signup'}>
             {isSignup ? 'Sign in' : 'Create account'} <ArrowUpRight size={15} />
           </Link>
-        </div>
+        </div>}
       </header>
       <main className="access-main">
         <section className="access-form">

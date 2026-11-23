@@ -89,16 +89,12 @@ export function MfaPage() {
               required
             />
           </label>
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
           <Button type="submit" disabled={busy}>
             {busy ? 'Checking…' : 'Verify'}
           </Button>
         </form>
       )}
+      {error && <p role="alert" className="text-sm">{error}</p>}
       <Button
         variant="ghost"
         onClick={() => {

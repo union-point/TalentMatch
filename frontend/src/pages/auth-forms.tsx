@@ -125,6 +125,7 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
     ['reset-password', 'accept-invitation'].includes(mode) && !token;
   return (
     <AuthShell
+      accountLink={mode === 'signup' ? 'login' : mode === 'login' ? 'signup' : undefined}
       title={titles[mode]}
       description={{
         login: 'Welcome back. Enter your details to access your workspace.',
@@ -241,7 +242,7 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
           <Link to="/verify-email" className="text-link text-foreground">Verify email</Link>
         </div>
       ) : mode !== 'signup' && (
-        <Link to="/login" className="text-link w-fit text-sm">Back to sign in</Link>
+        <Link to="/login" className="text-link w-fit text-sm">Sign in</Link>
       )}
       {destination && auth.error && (
         <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
