@@ -3,7 +3,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.infrastructure.persistence.models.base import Base, UUIDMixin
@@ -51,6 +51,7 @@ class ActionTokenModel(Base, UUIDMixin):
     organization_id: Mapped[UUID | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     role: Mapped[str] = mapped_column(String(10), default="member")
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verification_completed: Mapped[bool] = mapped_column(Boolean, server_default=false())
 
 
 class MfaCredentialModel(Base):

@@ -1,6 +1,9 @@
 from dataclasses import dataclass
+from typing import Literal
 
 from app.domain.entities.identity import AuthSession, Membership, Organization, User
+
+VerificationResult = Literal["verified", "already_verified"]
 
 
 @dataclass

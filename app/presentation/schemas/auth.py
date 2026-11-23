@@ -2,6 +2,8 @@ from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from app.application.dto.auth import VerificationResult
+
 Password = Annotated[str, Field(min_length=15, max_length=128)]
 
 
@@ -36,6 +38,11 @@ class LoginBody(EmailBody):
 
 class TokenBody(AuthBody):
     token: Annotated[str, Field(min_length=20, max_length=128)]
+
+
+class VerifyEmailResponse(BaseModel):
+    status: VerificationResult
+    detail: str = "Email verified. Sign in to continue."
 
 
 class ResetBody(TokenBody):

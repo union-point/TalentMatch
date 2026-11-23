@@ -16,6 +16,7 @@ from app.presentation.schemas.auth import (
     RegisterBody,
     ResetBody,
     TokenBody,
+    VerifyEmailResponse,
 )
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
@@ -101,13 +102,21 @@ async def login(
 async def verify_email(
     body: TokenBody,
     request: Request,
+    response: Response,
     context: AuthContext = Depends(get_auth_context),
     services: AuthServices = Depends(get_auth_services),
-) -> dict[str, str]:
-    keys = await reserve(services, request, "verify:" + body.token)
-    await services.auth.verify_email(body.token)
-    await services.throttle.release(keys)
-    return {"detail": "Email verified. Sign in to continue."}
+) -> VerifyEmailResponse:
+    await services.throttle.reserve(
+        "verify",
+        body.token,
+        request.client.host if request.client else "unknown",
+        settings.auth_login_account_limit,
+        settings.auth_login_ip_limit,
+        300,
+    )
+    result = await services.auth.verify_email(body.token)
+    response.headers["Cache-Control"] = "no-store"
+    return VerifyEmailResponse(status=result)
 
 
 @router.post("/resend-verification", status_code=202)

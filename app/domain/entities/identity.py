@@ -64,6 +64,7 @@ class ActionToken:
     role: Role = "member"
     consumed_at: datetime | None = None
     id: UUID = field(default_factory=uuid4)
+    verification_completed: bool = False
 
 
 @dataclass

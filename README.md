@@ -329,8 +329,13 @@ Error responses keep the problem-response shape. Authentication error `title`
 values are stable codes such as `session_expired`, `csrf_failed`, `invalid_factor`,
 `owner_required`, and `rate_limited`. Rate limits return `Retry-After`.
 Registration, verification resends, and password-recovery requests use the same
-accepted message for existing and unknown accounts. No token is consumed by GET;
-email links use URL fragments and confirmation pages strip the fragment immediately.
+accepted message for existing and unknown accounts. No token is consumed by GET.
+Verification links keep their token in the URL fragment until the confirmation
+request reaches a terminal result. A confirmation returns `verified` or, for a
+repeat of the completed link within its original lifetime, `already_verified`.
+Neither result signs the browser in.
+Requesting a fresh verification email leaves earlier links usable until they
+expire or one of the links completes verification.
 
 Session defaults are 30 minutes idle and 12 hours absolute; incomplete sessions
 last 10 minutes. Verification links last 24 hours, reset links 30 minutes, and

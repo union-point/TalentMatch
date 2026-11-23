@@ -2,7 +2,7 @@ import json
 from contextlib import suppress
 from datetime import timedelta
 
-from app.application.dto.auth import AuthContext, AuthPolicy
+from app.application.dto.auth import AuthContext, AuthPolicy, VerificationResult
 from app.application.services.auth_sessions import (
     AuthError,
     SessionService,
@@ -87,7 +87,8 @@ class AuthService:
                 return
             if purpose == "reset" and user.verified_at is None:
                 return
-            await repo.invalidate_tokens(user.id, purpose)
+            if purpose == "reset":
+                await repo.invalidate_tokens(user.id, purpose)
             seconds = (
                 self._policy.reset_seconds
                 if purpose == "reset"
@@ -115,24 +116,38 @@ class AuthService:
             raise AuthError("invalid_token", "This link is invalid or expired.")
         return token
 
-    async def verify_email(self, raw: str) -> None:
+    async def verify_email(self, raw: str) -> VerificationResult:
         async with self._transaction() as repo:
-            token = await self.valid_token(repo, raw, "verify")
-            user = await repo.user(token.user_id) if token.user_id else None
-            if user is None:
-                raise AuthError("invalid_token", "This link is invalid or expired.")
-            if user.verified_at is None:
-                user.verified_at = utcnow()
-                if user.pending_organization_name:
-                    organization = Organization(user.pending_organization_name)
-                    await repo.save_organization(organization)
-                    await repo.save_membership(Membership(user.id, organization.id, "owner"))
-                user.pending_organization_name = None
-                await repo.save_user(user)
-            token.consumed_at = utcnow()
+            digest = self._secrets.digest(raw)
+            peek = await repo.token(digest, "verify", lock=False)
+            # Match resend's lock order and re-read the token after acquiring the user lock.
+            user = await repo.user(peek.user_id) if peek and peek.user_id else None
+            token = await repo.token(digest, "verify") if user else None
+            if token is None or user is None:
+                raise AuthError("invalid_token", "This verification link is invalid.")
+            now = utcnow()
+            if token.consumed_at is not None:
+                if token.verification_completed and token.expires_at > now:
+                    return "already_verified"
+                raise AuthError("used_token", "This verification link is no longer active.")
+            if token.expires_at <= now:
+                raise AuthError("expired_token", "This verification link has expired.")
+            if user.verified_at is not None:
+                raise AuthError("used_token", "This verification link is no longer active.")
+
+            user.verified_at = now
+            if user.pending_organization_name:
+                organization = Organization(user.pending_organization_name)
+                await repo.save_organization(organization)
+                await repo.save_membership(Membership(user.id, organization.id, "owner"))
+            user.pending_organization_name = None
+            await repo.save_user(user)
+            token.consumed_at = now
+            token.verification_completed = True
             await repo.save_token(token)
             await repo.invalidate_tokens(user.id, "verify")
             await repo.revoke_sessions(user.id)
+            return "verified"
 
     async def login(self, email: str, password: str, context: AuthContext) -> AuthContext:
         async with self._transaction() as repo:

@@ -1,6 +1,7 @@
 """Authentication tests use real PostgreSQL and real cryptography, without identity overrides."""
 
 import json
+from asyncio import gather
 from collections.abc import AsyncIterator
 from datetime import timedelta
 from pathlib import Path
@@ -35,6 +36,7 @@ from app.infrastructure.persistence.models.identity import (
 )
 from app.infrastructure.persistence.repositories.identity_repo import SQLAlchemyIdentityTransaction
 from app.infrastructure.security.auth_services import AuthServices, get_auth_services
+from app.infrastructure.security.auth_throttle import ThrottleError
 from app.infrastructure.security.identity import ArgonPasswordHasher, EncryptedIdentitySecrets
 from app.main import app
 from app.presentation.api.middleware import _request_history
@@ -185,8 +187,11 @@ async def test_duplicate_signup_tokens_and_generic_email_requests(auth_env: Auth
         assert await db.scalar(select(func.count()).select_from(UserModel)) == 1
         assert await db.scalar(select(func.count()).select_from(MembershipModel)) == 0
     token = await email_token(factory, crypto, "owner@example.com", "verify-email")
-    assert (await post(client, "auth/verify-email", {"token": token})).status_code == 200
-    assert (await post(client, "auth/verify-email", {"token": token})).status_code == 400
+    verified = await post(client, "auth/verify-email", {"token": token})
+    assert verified.status_code == 200 and verified.json()["status"] == "verified"
+    replay = await post(client, "auth/verify-email", {"token": token})
+    assert replay.status_code == 200 and replay.json()["status"] == "already_verified"
+    assert (await client.get("/api/v1/auth/session")).json()["state"] == "anonymous"
     known = await post(client, "auth/forgot-password", {"email": "owner@example.com"})
     unknown = await post(client, "auth/forgot-password", {"email": "missing@example.com"})
     assert known.status_code == unknown.status_code == 202 and known.json() == unknown.json()
@@ -572,29 +577,89 @@ async def test_legacy_owner_invitation_unlocks_workspace_without_mfa(auth_env: A
         await services.organizations.invite_legacy_owner("replacement@example.com")
 
 
+async def test_verification_resend_and_token_outcomes(auth_env: AuthEnv) -> None:
+    client, factory, crypto, services = auth_env
+    email = "owner@example.com"
+    signup = await post(
+        client,
+        "auth/register",
+        {"email": email, "password": PASSWORD, "organization_name": "Example"},
+    )
+    original = await email_token(factory, crypto, email, "verify-email")
+    known = await post(client, "auth/resend-verification", {"email": email})
+    unknown = await post(client, "auth/resend-verification", {"email": "unknown@example.com"})
+    assert known.status_code == unknown.status_code == signup.status_code == 202
+    assert known.json() == unknown.json() == signup.json()
+    replacement = await email_token(factory, crypto, email, "verify-email")
+    assert replacement != original
+
+    invalid = await post(client, "auth/verify-email", {"token": crypto.token()})
+    assert invalid.status_code == 400 and invalid.json()["title"] == "invalid_token"
+    async with factory() as db, db.begin():
+        await db.execute(
+            update(ActionTokenModel)
+            .where(ActionTokenModel.token_hash == crypto.digest(replacement))
+            .values(expires_at=utcnow() - timedelta(seconds=1))
+        )
+    expired = await post(client, "auth/verify-email", {"token": replacement})
+    assert expired.status_code == 400 and expired.json()["title"] == "expired_token"
+    await post(client, "auth/resend-verification", {"email": email})
+    alternate = await email_token(factory, crypto, email, "verify-email")
+
+    pending = await post(client, "auth/login", {"email": email, "password": PASSWORD})
+    assert pending.json()["state"] == "email_verification_required"
+    assert (await client.get("/api/v1/job-descriptions")).status_code == 403
+    assert (await post(client, "auth/verify-email", {"token": original})).json()["status"] == (
+        "verified"
+    )
+    assert (await client.get("/api/v1/job-descriptions")).status_code == 401
+    used = await post(client, "auth/verify-email", {"token": alternate})
+    assert used.status_code == 400 and used.json()["title"] == "used_token"
+    verified_address = await post(client, "auth/resend-verification", {"email": email})
+    assert verified_address.status_code == unknown.status_code
+    assert verified_address.json() == unknown.json()
+    assert await email_token(factory, crypto, email, "verify-email") == alternate
+
+    login = await post(client, "auth/login", {"email": email, "password": PASSWORD})
+    assert login.json()["state"] == "authenticated"
+    replay = await post(client, "auth/verify-email", {"token": original})
+    assert replay.json()["status"] == "already_verified"
+    assert (await client.get("/api/v1/job-descriptions")).status_code == 200
+    csrf = (await client.get("/api/v1/auth/session")).json()["csrf_token"]
+    reserve = services.throttle.reserve
+    assert isinstance(reserve, AsyncMock)
+    reserve.side_effect = ThrottleError(120)
+    limited = await client.post(
+        "/api/v1/auth/resend-verification",
+        json={"email": email},
+        headers={"Origin": "http://test", "X-CSRF-Token": csrf},
+    )
+    assert limited.status_code == 429 and limited.headers["Retry-After"] == "120"
+
+
 async def test_concurrent_signup_and_verification_resend_are_atomic(auth_env: AuthEnv) -> None:
-    import asyncio
-
-    from app.application.services.auth_sessions import AuthError
-
     _, factory, crypto, services = auth_env
-    results = await asyncio.gather(
+    await gather(
         services.auth.register("concurrent@example.com", PASSWORD, "First"),
         services.auth.register("concurrent@example.com", PASSWORD, "Second"),
-        return_exceptions=True,
     )
-    assert results == [None, None]
     async with factory() as db:
         assert await db.scalar(select(func.count()).select_from(UserModel)) == 1
     token = await email_token(factory, crypto, "concurrent@example.com", "verify-email")
-    results = await asyncio.gather(
+    first, second, _ = await gather(
+        services.auth.verify_email(token),
         services.auth.verify_email(token),
         services.auth.request_email("concurrent@example.com", "verify"),
-        return_exceptions=True,
     )
-    assert all(result is None or isinstance(result, AuthError) for result in results)
+    assert {first, second} == {"verified", "already_verified"}
     async with factory() as db:
-        assert await db.scalar(select(func.count()).select_from(MembershipModel)) <= 1
+        assert await db.scalar(select(func.count()).select_from(MembershipModel)) == 1
+        assert (
+            await db.scalar(
+                select(func.count()).where(OrganizationModel.name.in_(("First", "Second")))
+            )
+            == 1
+        )
 
 
 async def test_password_reset_revokes_inflight_mfa_challenges(auth_env: AuthEnv) -> None:
