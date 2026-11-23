@@ -97,13 +97,14 @@ class OrganizationService:
             await repo.invalidate_tokens(user.id, "verify")
             membership = Membership(user.id, organization.id, invitation.role)
             await repo.save_membership(membership)
+            if organization.locked:
+                organization.locked = False
+                await repo.save_organization(organization)
             invitation.consumed_at = utcnow()
             await repo.save_token(invitation)
             await repo.revoke_sessions(user.id)
             mfa = await repo.mfa(user.id)
-            return await self._sessions.issue(
-                repo, user, login_state(user, membership, mfa), context.session
-            )
+            return await self._sessions.issue(repo, user, login_state(user, mfa), context.session)
 
     async def list_members(self, context: AuthContext) -> list[tuple[User, Membership]]:
         actor = principal(context)

@@ -51,16 +51,10 @@ class MfaService:
             await repo.user(user.id)  # serialize credential/recovery changes for this user
             await self._require_live_session(repo, context)
             await self.verify_factor(repo, user.id, code)
-            membership = await repo.membership(user.id)
-            if membership and membership.role == "owner":
-                organization = await repo.organization(membership.organization_id)
-                if organization and organization.locked:
-                    organization.locked = False
-                    await repo.save_organization(organization)
             return await self._sessions.issue(repo, user, "authenticated", context.session)
 
     async def begin(self, context: AuthContext, password: str, code: str | None) -> tuple[str, str]:
-        if context.session.state not in {"authenticated", "mfa_enrollment_required"}:
+        if context.session.state != "authenticated":
             raise AuthError("invalid_state", "Complete email verification and sign-in first.", 403)
         async with self._transaction() as repo:
             user = await self._auth.check_password(repo, context, password)
@@ -86,9 +80,9 @@ class MfaService:
         return codes
 
     async def confirm(self, context: AuthContext, code: str) -> tuple[AuthContext, list[str]]:
-        user = require_user(context)
-        if context.session.state not in {"authenticated", "mfa_enrollment_required"}:
+        if context.session.state != "authenticated":
             raise AuthError("invalid_state", "Complete sign-in first.", 403)
+        user = require_user(context)
         async with self._transaction() as repo:
             await repo.user(user.id)
             await self._require_live_session(repo, context)
@@ -112,12 +106,6 @@ class MfaService:
             credential.last_used_step = step
             await repo.save_mfa(credential)
             codes = await self._recovery_codes(repo, user)
-            membership = await repo.membership(user.id)
-            if membership and membership.role == "owner":
-                organization = await repo.organization(membership.organization_id)
-                if organization and organization.locked:
-                    organization.locked = False
-                    await repo.save_organization(organization)
             await repo.revoke_sessions(user.id)
             return await self._sessions.issue(repo, user, "authenticated"), codes
 
@@ -129,11 +117,6 @@ class MfaService:
         async with self._transaction() as repo:
             user = await self._auth.check_password(repo, context, password)
             await self._require_live_session(repo, context)
-            membership = await repo.membership(user.id)
-            if disable and membership and membership.role == "owner":
-                raise AuthError(
-                    "owner_mfa_required", "Organization owners must keep MFA enabled.", 403
-                )
             await self.verify_factor(repo, user.id, code)
             if disable:
                 await repo.delete_mfa(user.id)

@@ -5,7 +5,6 @@ from app.application.dto.auth import AuthContext, AuthPolicy
 from app.core.exceptions import AppError
 from app.domain.entities.identity import (
     AuthSession,
-    Membership,
     MfaCredential,
     Principal,
     SessionState,
@@ -23,15 +22,11 @@ class AuthError(AppError):
         super().__init__(detail)
 
 
-def login_state(
-    user: User, membership: Membership | None, mfa: MfaCredential | None
-) -> SessionState:
+def login_state(user: User, mfa: MfaCredential | None) -> SessionState:
     if user.verified_at is None:
         return "email_verification_required"
     if mfa and mfa.encrypted_secret:
         return "mfa_challenge_required"
-    if membership and membership.role == "owner":
-        return "mfa_enrollment_required"
     return "authenticated"
 
 
