@@ -159,35 +159,36 @@ test('owner signs in without MFA and can enable it from Account security', async
   const security = page.getByRole('region', { name: 'Two-factor authentication' });
   await expect(security.getByText('Off', { exact: true })).toBeVisible();
   await security.getByRole('button', { name: 'Enable authenticator' }).click();
-  await security.getByLabel('Current password').fill(password);
-  await page.getByRole('button', { name: 'Set up authenticator' }).click();
-  await expect(
-    page.getByAltText('Scan this QR code with your authenticator app')
-  ).toBeVisible();
-  await page.getByLabel('Authentication code', { exact: true }).fill('123456');
-  await page.getByRole('button', { name: 'Confirm authenticator' }).click();
-  await expect(security.getByText('On', { exact: true })).toBeVisible();
-  await expect(page.getByLabel('Recovery codes', { exact: true })).toHaveValue(
-    codes.join('\n')
-  );
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Current password').fill(password);
+  await dialog.getByRole('button', { name: 'Set up authenticator' }).click();
+  await expect(page.getByAltText('Scan this QR code with your authenticator app')).toBeVisible();
+  await dialog.getByLabel('Authentication code', { exact: true }).fill('123456');
+  await dialog.getByRole('button', { name: 'Confirm authenticator' }).click();
+  await expect(dialog.getByLabel('Recovery codes', { exact: true })).toHaveValue(codes.join('\n'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await expect(
-    page.getByLabel('Recovery codes', { exact: true })
-  ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Continue' })).toBeDisabled();
-  await page.getByLabel('I saved my recovery codes').check();
-  await page.getByRole('button', { name: 'Continue' }).click();
-  const turnOff = security.getByRole('button', { name: 'Turn off two-factor authentication' });
-  await expect(turnOff).toBeDisabled();
-  await security.getByLabel('Current password').fill(password);
-  await security.getByLabel('Authenticator or recovery code').fill(codes[0]);
+  await expect(dialog.getByLabel('Recovery codes', { exact: true })).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Done' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel('I saved my recovery codes').check();
+  await dialog.getByRole('button', { name: 'Done' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(security.getByText('On', { exact: true })).toBeVisible();
+  await security.getByRole('button', { name: 'Manage two-factor authentication' }).click();
+  const turnOff = dialog.getByRole('button', { name: 'Turn off two-factor authentication' });
   await turnOff.click();
+  await dialog.getByLabel('Current password').fill(password);
+  await dialog.getByLabel('Authenticator or recovery code').fill(codes[0]);
+  await turnOff.click();
+  await expect(dialog.getByRole('heading', { name: 'Two-factor authentication is off' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Done' }).click();
   await expect(security.getByText('Off', { exact: true })).toBeVisible();
-  await page.getByRole('main')
+  await page.getByRole('region', { name: 'Sessions' })
     .getByRole('button', { name: 'Sign out', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: 'Sign in', exact: true })
-  ).toBeVisible();
+  await dialog.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Sign in', exact: true })).toBeVisible();
+  await expect(page.getByText('You’ve signed out on this device.')).toBeVisible();
 });
 
 test('protected routes wait for the session and preserve the requested destination', async ({

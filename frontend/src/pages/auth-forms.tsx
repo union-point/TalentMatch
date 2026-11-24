@@ -39,6 +39,10 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
   const location = useLocation();
   const [params] = useSearchParams();
   const loginState = location.state as { email?: string } | null;
+  const signedOut = params.get('signedOut');
+  const signInDescription = signedOut === 'everywhere' ? 'You’ve signed out on all devices.'
+    : signedOut === 'device' ? 'You’ve signed out on this device.'
+      : 'Welcome back. Enter your details to access your workspace.';
   const fromPasswordReset = mode === 'login' && params.get('source') === 'password-reset';
   const [token] = useState(
     () =>
@@ -143,7 +147,7 @@ export function AuthForm({ mode, destination }: { mode: Mode; destination?: stri
       accountLink={mode === 'signup' ? 'login' : mode === 'login' ? 'signup' : undefined}
       title={titles[mode]}
       description={{
-        login: 'Welcome back. Enter your details to access your workspace.',
+        login: signInDescription,
         signup: 'Create a private workspace for your hiring team.',
         'accept-invitation': 'Accept your invitation to the hiring workspace.',
       }[mode]}

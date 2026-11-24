@@ -19,13 +19,13 @@ import {
   verificationPath,
 } from '@/lib/auth-navigation';
 import { MfaPage } from '@/pages/mfa';
-import { Account } from '@/pages/account';
 import { OrganizationPage } from '@/pages/organization';
 
 const queryClient = new QueryClient();
 const CandidateDetail = lazy(() =>
   import('@/pages/candidate-detail').then((module) => ({ default: module.CandidateDetail }))
 );
+const Account = lazy(() => import('@/pages/account').then((module) => ({ default: module.Account })));
 
 function App() {
   return (
@@ -56,7 +56,11 @@ function App() {
             <Route path="/mfa" element={<MfaPage />} />
             <Route element={<ProtectedRoute organization={false} />}>
               <Route element={<Layout />}>
-                <Route path="/account" element={<Account />} />
+                <Route path="/account" element={
+                  <Suspense fallback={<p role="status">Loading account security…</p>}>
+                    <Account />
+                  </Suspense>
+                } />
               </Route>
             </Route>
             <Route element={<ProtectedRoute />}>

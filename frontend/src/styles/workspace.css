@@ -23,7 +23,7 @@
 .workspace-content:focus { outline: none; }
 .workspace-content h1 { font: 400 clamp(2.8rem, 4.5vw, 4.8rem)/1.05 var(--font-heading); letter-spacing: -.035em; }
 .workspace-content [data-slot="card"] { --card-spacing: clamp(16px, 2vw, 28px); }
-.workspace-content [data-slot="card-title"], .settings-section h2 { font: 400 1.85rem/1.1 var(--font-heading); letter-spacing: -.02em; }
+.workspace-content [data-slot="card-title"], .settings-section h2, .settings-heading { font: 400 1.85rem/1.1 var(--font-heading); letter-spacing: -.02em; }
 .workspace-content [data-slot="table-head"] { font-size: .74rem; color: var(--color-muted-foreground); }
 .workspace-content [data-slot="table-cell"] { padding-block: 13px; }
 .page-heading { padding-bottom: 22px; border-bottom: 1px solid var(--color-border); }
@@ -67,3 +67,7 @@
 @media (min-width: 1280px) {
   .review-intake { grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); }
 }
+
+.account-security-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px 24px; }
+.account-security-row > :first-child { flex: 1 1 16rem; }
+.account-security-row > h3:first-child { flex-basis: 6rem; }

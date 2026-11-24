@@ -19,7 +19,7 @@ export function ProtectedRoute({
       </p>
     );
   if (error && !session) return <AuthForm mode="login" destination={location.pathname + location.search} />;
-  if (error)
+  if (error && (organization || session?.state !== 'authenticated'))
     return (
       <AuthShell title="Reconnect to your workspace" description="Your session could not be checked. Try again to continue.">
         <p role="alert">{error}</p>
