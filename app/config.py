@@ -12,7 +12,6 @@ class Settings(BaseSettings):
     )
 
     database_url: str
-    gemini_api_key: str
     redis_url: str
     cors_origins: list[str]
     upload_dir: str = "./uploads"
@@ -27,6 +26,7 @@ class Settings(BaseSettings):
     ai_fast_track_model: str = "gemini-3.1-flash-lite"
     ai_deep_analysis_provider: str = "openai"
     ai_deep_analysis_model: str = "gemini-3.1-flash-lite"
+    gemini_api_key: str | None = None
     deep_analysis_dispatch_batch_size: int = Field(default=100, gt=0)
     deep_analysis_dispatch_retry_seconds: int = Field(default=900, gt=0)
     deep_analysis_timeout_seconds: int = Field(default=240, gt=0)
@@ -56,6 +56,13 @@ class Settings(BaseSettings):
     @property
     def auth_cookie_name(self) -> str:
         return "talentmatch_session" if self.auth_allow_insecure_cookies else "__Host-talentmatch"
+
+    @model_validator(mode="after")
+    def validate_ai_configuration(self) -> Self:
+        providers = (self.ai_fast_track_provider, self.ai_deep_analysis_provider)
+        if "gemini" in providers and not (self.gemini_api_key or "").strip():
+            raise ValueError("GEMINI_API_KEY is required when a Gemini provider is selected")
+        return self
 
     @model_validator(mode="after")
     def validate_auth_configuration(self) -> Self:
