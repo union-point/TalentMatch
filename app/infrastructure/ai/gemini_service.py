@@ -8,9 +8,9 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 from pydantic import BaseModel
 
-from app.application.dto.ai import DeepAnalysisData, FastTrackResultData
 from app.config import settings
 from app.core.exceptions import AIResponseError
+from app.domain.ports.ai_results import DeepAnalysisData, FastTrackResultData
 from app.domain.ports.ai_service import AIService
 from app.infrastructure.ai import prompts
 

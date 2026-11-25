@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from app.application.dto.ai import DeepAnalysisData, FastTrackResultData
+from app.domain.ports.ai_results import DeepAnalysisData, FastTrackResultData
 
 
 class AIService(ABC):

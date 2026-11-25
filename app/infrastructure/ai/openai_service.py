@@ -9,8 +9,8 @@ from openai.types.shared_params import ResponseFormatJSONObject, ResponseFormatJ
 from openai.types.shared_params.response_format_json_schema import JSONSchema
 from pydantic import BaseModel
 
-from app.application.dto.ai import DeepAnalysisData, FastTrackResultData
 from app.core.exceptions import AIResponseError
+from app.domain.ports.ai_results import DeepAnalysisData, FastTrackResultData
 from app.domain.ports.ai_service import AIService
 from app.infrastructure.ai import prompts
 
