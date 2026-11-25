@@ -8,12 +8,10 @@ from app.application.dto.ingestion import BatchIngestionResult, IngestionFailure
 from app.core.exceptions import public_error_message
 from app.domain.entities.job_description import JobDescription
 from app.domain.entities.resume import Resume
-from app.domain.ports.file_parser import FileParser
+from app.domain.ports.file_parser import FileParser, FileParserSelector
 from app.domain.ports.file_storage import FileStorage
 from app.domain.ports.repository import JobDescriptionRepository, ResumeRepository
-from app.infrastructure.parsing.parser_factory import get_parser_for_file
-from app.infrastructure.parsing.text_normalizer import normalize_text, strip_markdown_formatting
-from app.infrastructure.security.prompt_injection_detector import detect_injection
+from app.domain.value_objects import InjectionScanResult
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +24,21 @@ class IngestionService:
         file_storage: FileStorage,
         organization_id: uuid.UUID,
         transaction: Callable[[], AbstractAsyncContextManager[object]] = nullcontext,
+        *,
+        parser_for_file: FileParserSelector,
+        normalize_job_description: Callable[[str], str],
+        normalize_resume: Callable[[str], str],
+        scan_for_injection: Callable[[str], InjectionScanResult],
     ) -> None:
         self._organization_id = organization_id
         self._jd_repository = jd_repository
         self._resume_repository = resume_repository
         self._file_storage = file_storage
         self._transaction = transaction
+        self._parser_for_file = parser_for_file
+        self._normalize_job_description = normalize_job_description
+        self._normalize_resume = normalize_resume
+        self._scan_for_injection = scan_for_injection
 
     async def _ingest_job_description(
         self,
@@ -41,13 +48,13 @@ class IngestionService:
         title: str,
         company: str,
     ) -> IngestionResponse:
-        parser = get_parser_for_file(filename, allow_plain_text=True)
+        parser = self._parser_for_file(filename, allow_plain_text=True)
         stored_path = await self._file_storage.save(file_content, filename, "jds")
 
         stored_paths.append(stored_path)
         raw_text = await self._parse_file(parser, stored_path)
-        normalized = normalize_text(raw_text)
-        injection_result = detect_injection(raw_text)
+        normalized = self._normalize_job_description(raw_text)
+        injection_result = self._scan_for_injection(raw_text)
 
         jd = JobDescription(
             organization_id=self._organization_id,
@@ -79,13 +86,13 @@ class IngestionService:
         candidate_name: str | None = None,
         email: str | None = None,
     ) -> IngestionResponse:
-        parser = get_parser_for_file(filename)
+        parser = self._parser_for_file(filename)
         stored_path = await self._file_storage.save(file_content, filename, "resumes")
 
         stored_paths.append(stored_path)
         raw_text = await self._parse_file(parser, stored_path)
-        normalized = strip_markdown_formatting(raw_text)
-        injection_result = detect_injection(raw_text)
+        normalized = self._normalize_resume(raw_text)
+        injection_result = self._scan_for_injection(raw_text)
 
         resume = Resume(
             organization_id=self._organization_id,

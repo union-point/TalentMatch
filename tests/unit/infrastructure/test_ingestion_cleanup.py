@@ -1,7 +1,8 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from sqlalchemy import JSON, MetaData, Uuid, func, select
@@ -23,7 +24,9 @@ from app.infrastructure.storage.local_file_storage import LocalFileStorage
 
 @pytest.mark.parametrize("stage", ["parse", "persist", "commit"])
 @pytest.mark.parametrize("kind", ["resume", "jd"])
-async def test_upload_failure_removes_file(tmp_path: Path, stage: str, kind: str) -> None:
+async def test_upload_failure_removes_file(
+    tmp_path: Path, stage: str, kind: str, make_ingestion_service: partial[IngestionService]
+) -> None:
     repo = AsyncMock()
     repo.save.side_effect = lambda entity: entity
     parser = AsyncMock()
@@ -40,21 +43,25 @@ async def test_upload_failure_removes_file(tmp_path: Path, stage: str, kind: str
         if stage == "commit":
             raise failure
 
-    service = IngestionService(repo, repo, LocalFileStorage(tmp_path), TEST_ORG_ID, transaction)
-    with patch(
-        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
-    ):
-        with pytest.raises(RuntimeError, match="failed upload"):
-            if kind == "resume":
-                await service.ingest_resume(b"text", "test.txt")
-            else:
-                await service.ingest_job_description(b"text", "test.txt", "Role", "Company")
+    service = make_ingestion_service(
+        repo,
+        repo,
+        LocalFileStorage(tmp_path),
+        TEST_ORG_ID,
+        transaction,
+        parser_for_file=Mock(return_value=parser),
+    )
+    with pytest.raises(RuntimeError, match="failed upload"):
+        if kind == "resume":
+            await service.ingest_resume(b"text", "test.txt")
+        else:
+            await service.ingest_job_description(b"text", "test.txt", "Role", "Company")
     assert not list(tmp_path.rglob("*.txt"))
 
 
 @pytest.mark.parametrize("stage", ["parse", "persist", "commit"])
 async def test_mixed_batch_preserves_successes_and_cleans_failed_file(
-    tmp_path: Path, stage: str
+    tmp_path: Path, stage: str, make_ingestion_service: partial[IngestionService]
 ) -> None:
     engine = create_async_engine("sqlite+aiosqlite://")
     metadata = MetaData()
@@ -90,30 +97,27 @@ async def test_mixed_batch_preserves_successes_and_cleans_failed_file(
                 return result
 
             repository.save = save_resume
-            service = IngestionService(
-                SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID),
-                repository,
-                LocalFileStorage(tmp_path),
-                TEST_ORG_ID,
-                transaction,
-            )
             parser = AsyncMock()
             parser.parse.side_effect = [
                 "Valid resume",
                 ParsingError("secret parser detail") if stage == "parse" else "Valid resume",
                 "Another valid resume",
             ]
-            with patch(
-                "app.application.services.ingestion_service.get_parser_for_file",
-                return_value=parser,
-            ):
-                result = await service.ingest_resumes_batch(
-                    [
-                        (b"ok", "ok.txt"),
-                        (b"bad", "bad.txt"),
-                        (b"later", "later.txt"),
-                    ]
-                )
+            service = make_ingestion_service(
+                SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID),
+                repository,
+                LocalFileStorage(tmp_path),
+                TEST_ORG_ID,
+                transaction,
+                parser_for_file=Mock(return_value=parser),
+            )
+            result = await service.ingest_resumes_batch(
+                [
+                    (b"ok", "ok.txt"),
+                    (b"bad", "bad.txt"),
+                    (b"later", "later.txt"),
+                ]
+            )
             assert [resume.filename for resume in result.resumes] == ["ok.txt", "later.txt"]
             assert len(result.errors) == 1
             assert result.errors[0].index == 1 and result.errors[0].filename == "bad.txt"
@@ -127,37 +131,47 @@ async def test_mixed_batch_preserves_successes_and_cleans_failed_file(
         await engine.dispose()
 
 
-async def test_all_failures_report_each_duplicate_filename(tmp_path: Path) -> None:
+async def test_all_failures_report_each_duplicate_filename(
+    tmp_path: Path, make_ingestion_service: partial[IngestionService]
+) -> None:
     parser = AsyncMock()
     parser.parse.side_effect = ParsingError("private document data")
-    service = IngestionService(AsyncMock(), AsyncMock(), LocalFileStorage(tmp_path), TEST_ORG_ID)
-    with patch(
-        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
-    ):
-        result = await service.ingest_resumes_batch([(b"a", "same.txt"), (b"b", "same.txt")])
+    service = make_ingestion_service(
+        AsyncMock(),
+        AsyncMock(),
+        LocalFileStorage(tmp_path),
+        TEST_ORG_ID,
+        parser_for_file=Mock(return_value=parser),
+    )
+    result = await service.ingest_resumes_batch([(b"a", "same.txt"), (b"b", "same.txt")])
     assert result.resumes == []
     assert [error.index for error in result.errors] == [0, 1]
     assert all(error.error == "Could not parse the uploaded document." for error in result.errors)
     assert not list(tmp_path.rglob("*.txt"))
 
 
-async def test_batch_cancellation_stops_processing_and_removes_current_file(tmp_path: Path) -> None:
+async def test_batch_cancellation_stops_processing_and_removes_current_file(
+    tmp_path: Path, make_ingestion_service: partial[IngestionService]
+) -> None:
     import asyncio
 
     parser, repository = AsyncMock(), AsyncMock()
     parser.parse.side_effect = ["Valid", asyncio.CancelledError(), "Never parsed"]
     repository.save.side_effect = lambda resume: resume
-    service = IngestionService(repository, repository, LocalFileStorage(tmp_path), TEST_ORG_ID)
-    with patch(
-        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
-    ):
-        with pytest.raises(asyncio.CancelledError):
-            await service.ingest_resumes_batch(
-                [
-                    (b"ok", "ok.txt"),
-                    (b"cancel", "cancel.txt"),
-                    (b"later", "later.txt"),
-                ]
-            )
+    service = make_ingestion_service(
+        repository,
+        repository,
+        LocalFileStorage(tmp_path),
+        TEST_ORG_ID,
+        parser_for_file=Mock(return_value=parser),
+    )
+    with pytest.raises(asyncio.CancelledError):
+        await service.ingest_resumes_batch(
+            [
+                (b"ok", "ok.txt"),
+                (b"cancel", "cancel.txt"),
+                (b"later", "later.txt"),
+            ]
+        )
     assert parser.parse.await_count == 2
     assert len(list(tmp_path.rglob("*.txt"))) == 1

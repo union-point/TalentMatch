@@ -1,9 +1,11 @@
 import uuid
+from functools import partial
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from httpx import AsyncClient
 
+from app.application.services.ingestion_service import IngestionService
 from app.core.exceptions import UnsupportedFileTypeError
 from app.domain.entities.identity import LEGACY_ORGANIZATION_ID as TEST_ORG_ID
 from app.domain.value_objects import InjectionScanResult
@@ -227,8 +229,9 @@ class TestIngestionAPI:
 
 class TestIngestionServiceUnit:
     @pytest.mark.asyncio
-    async def test_ingest_jd_stores_file_to_disk(self, temp_dir) -> None:
-        from app.application.services.ingestion_service import IngestionService
+    async def test_ingest_jd_stores_file_to_disk(
+        self, temp_dir, make_ingestion_service: partial[IngestionService]
+    ) -> None:
 
         mock_jd_repo = AsyncMock()
         mock_jd_repo.save = AsyncMock(
@@ -245,7 +248,7 @@ class TestIngestionServiceUnit:
         )
         mock_resume_repo = AsyncMock()
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(
+        service = make_ingestion_service(
             mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
         )
 
@@ -267,8 +270,9 @@ class TestIngestionServiceUnit:
         assert stored_files[0].suffix == ".html"
 
     @pytest.mark.asyncio
-    async def test_ingest_resume_stores_content_in_db(self, temp_dir) -> None:
-        from app.application.services.ingestion_service import IngestionService
+    async def test_ingest_resume_stores_content_in_db(
+        self, temp_dir, make_ingestion_service: partial[IngestionService]
+    ) -> None:
 
         mock_jd_repo = AsyncMock()
         mock_resume_repo = AsyncMock()
@@ -287,7 +291,7 @@ class TestIngestionServiceUnit:
         )
 
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(
+        service = make_ingestion_service(
             mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
         )
 
@@ -315,8 +319,9 @@ class TestIngestionServiceUnit:
         assert len(saved_resume.normalized_content) > 0
 
     @pytest.mark.asyncio
-    async def test_ingest_resume_injection_flagged(self, temp_dir) -> None:
-        from app.application.services.ingestion_service import IngestionService
+    async def test_ingest_resume_injection_flagged(
+        self, temp_dir, make_ingestion_service: partial[IngestionService]
+    ) -> None:
 
         mock_jd_repo = AsyncMock()
         mock_resume_repo = AsyncMock()
@@ -338,7 +343,7 @@ class TestIngestionServiceUnit:
         )
 
         file_storage = LocalFileStorage(base_dir=temp_dir)
-        service = IngestionService(
+        service = make_ingestion_service(
             mock_jd_repo, mock_resume_repo, file_storage, organization_id=TEST_ORG_ID
         )
 

@@ -2,6 +2,7 @@ import asyncio
 import os
 import tempfile
 from collections.abc import AsyncGenerator
+from functools import partial
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -10,6 +11,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 
 from app.application.dto.ingestion import BatchIngestionResult, IngestionResponse
+from app.application.services.ingestion_service import IngestionService
 from app.domain.value_objects import InjectionScanResult
 
 os.environ.setdefault(
@@ -107,6 +109,21 @@ def _make_ingestion_response(
         original_content_length=original_length,
         normalized_content_length=normalized_length,
         injection_scan=InjectionScanResult(passed=injection_passed),
+    )
+
+
+@pytest.fixture
+def make_ingestion_service() -> partial[IngestionService]:
+    from app.infrastructure.parsing.parser_factory import get_parser_for_file
+    from app.infrastructure.parsing.text_normalizer import normalize_text, strip_markdown_formatting
+    from app.infrastructure.security.prompt_injection_detector import detect_injection
+
+    return partial(
+        IngestionService,
+        parser_for_file=get_parser_for_file,
+        normalize_job_description=normalize_text,
+        normalize_resume=strip_markdown_formatting,
+        scan_for_injection=detect_injection,
     )
 
 

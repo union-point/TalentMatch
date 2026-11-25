@@ -10,6 +10,8 @@ from app.application.services.ingestion_service import IngestionService
 from app.config import settings
 from app.domain.entities.identity import Principal
 from app.infrastructure.ai.ai_factory import AIServiceFactory
+from app.infrastructure.parsing.parser_factory import get_parser_for_file
+from app.infrastructure.parsing.text_normalizer import normalize_text, strip_markdown_formatting
 from app.infrastructure.persistence.database import get_db
 from app.infrastructure.persistence.repositories.deep_analysis_repo import (
     SQLAlchemyDeepAnalysisRepository,
@@ -21,6 +23,7 @@ from app.infrastructure.persistence.repositories.job_description_repo import (
     SQLAlchemyJobDescriptionRepository,
 )
 from app.infrastructure.persistence.repositories.resume_repo import SQLAlchemyResumeRepository
+from app.infrastructure.security.prompt_injection_detector import detect_injection
 from app.infrastructure.storage.local_file_storage import get_local_file_storage
 from app.presentation.api.auth_dependencies import get_principal
 
@@ -33,7 +36,17 @@ async def get_ingestion_service(
     jd_repo = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
     resume_repo = SQLAlchemyResumeRepository(session, actor.organization_id)
     file_storage = get_local_file_storage()
-    yield IngestionService(jd_repo, resume_repo, file_storage, actor.organization_id, session.begin)
+    yield IngestionService(
+        jd_repo,
+        resume_repo,
+        file_storage,
+        actor.organization_id,
+        session.begin,
+        parser_for_file=get_parser_for_file,
+        normalize_job_description=normalize_text,
+        normalize_resume=strip_markdown_formatting,
+        scan_for_injection=detect_injection,
+    )
 
 
 async def get_fast_track_service(

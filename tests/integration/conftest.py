@@ -58,16 +58,12 @@ async def temp_upload_dir():
 
 
 @pytest_asyncio.fixture
-async def real_client(engine, temp_upload_dir) -> AsyncGenerator[AsyncClient, None]:
-    from app.application.services.ingestion_service import IngestionService
+async def real_client(
+    engine: AsyncEngine, temp_upload_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> AsyncGenerator[AsyncClient, None]:
     from app.infrastructure.persistence.database import get_db
-    from app.infrastructure.persistence.repositories.job_description_repo import (
-        SQLAlchemyJobDescriptionRepository,
-    )
-    from app.infrastructure.persistence.repositories.resume_repo import SQLAlchemyResumeRepository
     from app.infrastructure.storage.local_file_storage import LocalFileStorage
     from app.main import app
-    from app.presentation.api.dependencies import get_ingestion_service
 
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
@@ -76,16 +72,11 @@ async def real_client(engine, temp_upload_dir) -> AsyncGenerator[AsyncClient, No
             yield session
             await session.commit()
 
-    async def override_get_ingestion_service():
-        async with session_factory() as session:
-            jd_repo = SQLAlchemyJobDescriptionRepository(session, organization_id=TEST_ORG_ID)
-            resume_repo = SQLAlchemyResumeRepository(session, organization_id=TEST_ORG_ID)
-            file_storage = LocalFileStorage(base_dir=temp_upload_dir)
-            yield IngestionService(jd_repo, resume_repo, file_storage, TEST_ORG_ID, session.begin)
-            await session.commit()
-
+    monkeypatch.setattr(
+        "app.presentation.api.dependencies.get_local_file_storage",
+        lambda: LocalFileStorage(base_dir=temp_upload_dir),
+    )
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_ingestion_service] = override_get_ingestion_service
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:

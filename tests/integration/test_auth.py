@@ -477,9 +477,7 @@ async def test_protected_upload_transactions_and_denied_upload_cleanup(
     get_local_file_storage.cache_clear()
     parser = AsyncMock()
     parser.parse.return_value = "A candidate with Python experience"
-    with patch(
-        "app.application.services.ingestion_service.get_parser_for_file", return_value=parser
-    ):
+    with patch("app.presentation.api.dependencies.get_parser_for_file", return_value=parser):
         rejected = await client.post(
             "/api/v1/resumes/upload", files={"file": ("resume.pdf", b"PDF", "application/pdf")}
         )

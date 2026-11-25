@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -18,10 +19,12 @@ from app.infrastructure.storage.local_file_storage import LocalFileStorage
         ("description.markdown", "utf-16"),
     ],
 )
-async def test_job_text_ingestion(tmp_path: Path, filename: str, encoding: str) -> None:
+async def test_job_text_ingestion(
+    tmp_path: Path, filename: str, encoding: str, make_ingestion_service: partial[IngestionService]
+) -> None:
     repository = AsyncMock()
     repository.save.side_effect = lambda entity: entity
-    service = IngestionService(
+    service = make_ingestion_service(
         repository, AsyncMock(), LocalFileStorage(tmp_path), LEGACY_ORGANIZATION_ID
     )
     content = "# Résumé review\r\n\r\n- Lead the hiring team."
@@ -41,9 +44,11 @@ async def test_job_text_ingestion(tmp_path: Path, filename: str, encoding: str) 
 
 
 @pytest.mark.parametrize("content", [b" \r\n ", b"\xff\x02", b"PDF\x00"])
-async def test_invalid_text_upload_leaves_no_file(tmp_path: Path, content: bytes) -> None:
+async def test_invalid_text_upload_leaves_no_file(
+    tmp_path: Path, content: bytes, make_ingestion_service: partial[IngestionService]
+) -> None:
     repository = AsyncMock()
-    service = IngestionService(
+    service = make_ingestion_service(
         repository, AsyncMock(), LocalFileStorage(tmp_path), LEGACY_ORGANIZATION_ID
     )
 
