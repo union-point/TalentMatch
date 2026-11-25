@@ -1,18 +1,15 @@
 import uuid
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.application.services.ingestion_service import IngestionService
+from app.application.services.job_description_query_service import JobDescriptionQueryService
 from app.config import settings
-from app.domain.entities.identity import Principal
 from app.domain.value_objects import InjectionScanResult
-from app.infrastructure.persistence.database import get_db
-from app.infrastructure.persistence.repositories.job_description_repo import (
-    SQLAlchemyJobDescriptionRepository,
+from app.presentation.api.dependencies import (
+    get_ingestion_service,
+    get_job_description_query_service,
 )
-from app.presentation.api.auth_dependencies import get_principal
-from app.presentation.api.dependencies import get_ingestion_service
 from app.presentation.api.uploads import read_upload
 from app.presentation.schemas.job_description import (
     InjectionScanDetails,
@@ -68,11 +65,9 @@ async def upload_job_description(
     summary="List all job descriptions",
 )
 async def list_job_descriptions(
-    session: AsyncSession = Depends(get_db),
-    actor: Principal = Depends(get_principal),
+    service: JobDescriptionQueryService = Depends(get_job_description_query_service),
 ) -> JobDescriptionListResponse:
-    repo = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
-    items = await repo.get_all()
+    items = await service.list_job_descriptions()
     return JobDescriptionListResponse(
         items=[
             JobDescriptionListItem(
@@ -96,11 +91,9 @@ async def list_job_descriptions(
 )
 async def get_job_description(
     jd_id: uuid.UUID,
-    session: AsyncSession = Depends(get_db),
-    actor: Principal = Depends(get_principal),
+    service: JobDescriptionQueryService = Depends(get_job_description_query_service),
 ) -> JobDescriptionDetailResponse:
-    repo = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
-    jd = await repo.get_by_id(jd_id)
+    jd = await service.get_job_description(jd_id)
     if jd is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

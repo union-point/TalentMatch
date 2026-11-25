@@ -7,6 +7,7 @@ from app.application.services.dashboard_service import DashboardService
 from app.application.services.deep_analysis_service import DeepAnalysisService
 from app.application.services.fast_track_service import FastTrackService
 from app.application.services.ingestion_service import IngestionService
+from app.application.services.job_description_query_service import JobDescriptionQueryService
 from app.config import settings
 from app.domain.entities.identity import Principal
 from app.infrastructure.ai.ai_factory import AIServiceFactory
@@ -47,6 +48,14 @@ async def get_ingestion_service(
         normalize_resume=strip_markdown_formatting,
         scan_for_injection=detect_injection,
     )
+
+
+async def get_job_description_query_service(
+    session: AsyncSession = Depends(get_db),
+    actor: Principal = Depends(get_principal),
+) -> JobDescriptionQueryService:
+    repository = SQLAlchemyJobDescriptionRepository(session, actor.organization_id)
+    return JobDescriptionQueryService(repository)
 
 
 async def get_fast_track_service(

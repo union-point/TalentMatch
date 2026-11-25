@@ -410,6 +410,10 @@ async def test_every_hiring_endpoint_is_scoped_and_cross_org_analysis_has_no_sid
         )
     listing = await client.get("/api/v1/job-descriptions")
     assert [UUID(item["id"]) for item in listing.json()["items"]] == [own_job]
+    detail = await client.get(f"/api/v1/job-descriptions/{own_job}")
+    assert detail.status_code == 200
+    assert UUID(detail.json()["id"]) == own_job
+    assert detail.json()["normalized_content"] == "Job"
     for path in [
         f"job-descriptions/{foreign_job}",
         f"dashboard/jobs/{foreign_job}/candidates",
